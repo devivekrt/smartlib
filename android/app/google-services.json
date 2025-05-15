@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "1089242082795",
+    "firebase_url": "https://smart-lib-41db1-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "smart-lib-41db1",
+    "storage_bucket": "smart-lib-41db1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1089242082795:android:4d504e94e36140ca817dae",
+        "android_client_info": {
+          "package_name": "com.vivek.smartlib"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCAlx65BmNjkgpLT63KFASr0SleKL4VvTA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
