@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pinput/pinput.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:smartlib/user-pages/test.dart';
 import 'package:smartlib/widgets/solid_button.dart';
 import 'dart:io';
 import '../logic/string.dart';
@@ -479,7 +480,7 @@ class _SignUpState extends State<SignUp> {
               text: "SEND OTP",
               onPressed: () {
                 if (_formKey.currentState!.validate()) {
-                  signUpWithPhone(); // This will start the OTP verification process
+                  // signUpWithPhone(); // This will start the OTP verification process
                 }
               },
 
@@ -493,7 +494,7 @@ class _SignUpState extends State<SignUp> {
                 Text("Already have an account? "),
                 TextButton(
                   onPressed: () {
-                    Navigator.pop(context); // Navigate to login page
+                    // Navigator.pop(context); // Navigate to login page
                   },
                   child: Text("Login"),
                 ),
@@ -647,25 +648,10 @@ class _SignUpState extends State<SignUp> {
       child: Column(
         children: [
           // Progress bar
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              SizedBox(height: 30, width: 10),
-              Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
-                  color: Color(0xFF1940CC),
-                ),
-                height: h / 90,
-                width: w / 1.3,
-              ),
-              SizedBox(width: 12),
-              Text("${count} of ${total}", style: TextStyle(fontWeight: FontWeight.w700)),
-            ],
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: w * 0.05, vertical: h * 0.07),
+            child: CustomProgressBar(currentStep: 2, totalSteps: 3),
           ),
-          SizedBox(height: 20),
-
           Column(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -814,24 +800,10 @@ class _SignUpState extends State<SignUp> {
       child: Column(
         children: [
           // Progress bar
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              SizedBox(height: 30, width: 10),
-              Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
-                  color: Color(0xFF1940CC),
-                ),
-                height: h / 90,
-                width: w / 1.3,
-              ),
-              SizedBox(width: 12),
-              Text("${count} of ${total}", style: TextStyle(fontWeight: FontWeight.w700)),
-            ],
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: w * 0.05, vertical: h * 0.07),
+            child: CustomProgressBar(currentStep: 2, totalSteps: 3),
           ),
-          SizedBox(height: 20),
 
           Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -949,24 +921,10 @@ class _SignUpState extends State<SignUp> {
       child: Column(
         children: [
           // Progress bar
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              SizedBox(height: 30, width: 10),
-              Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
-                  color: Color(0xFF1940CC),
-                ),
-                height: h / 90,
-                width: w / 1.3,
-              ),
-              SizedBox(width: 12),
-              Text("${count} of ${total}", style: TextStyle(fontWeight: FontWeight.w700)),
-            ],
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: w * 0.05, vertical: h * 0.07),
+            child: CustomProgressBar(currentStep: 1, totalSteps: 3),
           ),
-          SizedBox(height: 20),
 
           Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -1053,6 +1011,7 @@ class _SignUpState extends State<SignUp> {
     );
   }
 
+
   @override
   void dispose() {
     _emailController.dispose();
@@ -1064,3 +1023,5 @@ class _SignUpState extends State<SignUp> {
     super.dispose();
   }
 }
+
+
