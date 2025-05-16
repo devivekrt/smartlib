@@ -3,13 +3,17 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:pinput/pinput.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:smartlib/user-pages/market_place.dart';
 import 'package:smartlib/user-pages/test.dart';
+import 'package:smartlib/user-pages/Login.dart';
 import 'package:smartlib/widgets/solid_button.dart';
 import 'dart:io';
 import '../logic/string.dart';
 import '../widgets/input_field.dart';
+import '../widgets/linear_progress.dart';
 import '../widgets/next_button.dart';
 
 class SignUp extends StatefulWidget {
@@ -41,7 +45,9 @@ class _SignUpState extends State<SignUp> {
   final ImagePicker _picker = ImagePicker();
 
   // For DOB
-  DateTime _selectedDate = DateTime.now().subtract(const Duration(days: 365 * 20)); // Default to 20 years ago
+  DateTime _selectedDate = DateTime.now().subtract(
+    const Duration(days: 365 * 20),
+  ); // Default to 20 years ago
 
   // For location permission
   bool _locationPermissionGranted = false;
@@ -61,9 +67,9 @@ class _SignUpState extends State<SignUp> {
         });
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error picking image: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error picking image: $e')));
     }
   }
 
@@ -81,7 +87,8 @@ class _SignUpState extends State<SignUp> {
               onPrimary: Colors.white,
               surface: Color(0xFF1E3A5F),
               onSurface: Colors.white,
-            ), dialogTheme: DialogThemeData(backgroundColor: Color(0xFF142E4F)),
+            ),
+            dialogTheme: DialogThemeData(backgroundColor: Color(0xFF142E4F)),
           ),
           child: child!,
         );
@@ -96,23 +103,105 @@ class _SignUpState extends State<SignUp> {
   }
 
   Future<void> _requestLocationPermission() async {
-    // This would typically use a plugin like geolocator
-    // For this example, we'll simulate permission being granted
+    LocationPermission permission;
 
+    // Check if location services are enabled
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Location services are disabled. Please enable them in settings.',
+          ),
+        ),
+      );
+      return;
+    }
 
+    // Check for current permission status
+    permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Location permission denied.')));
+        return;
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Location permissions are permanently denied. Please enable them in app settings.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    // If permission is granted
     setState(() {
       _locationPermissionGranted = true;
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Location permission granted!')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Location permission granted!')));
+  }
+
+  Future<bool> checkUserExists() async {
+    DatabaseReference databaseRef = FirebaseDatabase.instance.ref();
+    final snapshot =
+        await databaseRef
+            .child(SmartLib.constPath)
+            .orderByChild(SmartLib.constEmail)
+            .equalTo(_emailController.text.trim())
+            .once();
+
+    if (snapshot.snapshot.exists) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Email already in use. Please try a different email.'),
+        ),
+      );
+      return true;
+    }
+    // Also check if the phone number already exists
+    final phoneSnapshot =
+        await databaseRef
+            .child(SmartLib.constPath)
+            .orderByChild(SmartLib.constPhone)
+            .equalTo("${_phoneController.text.trim()}")
+            .once();
+
+    if (phoneSnapshot.snapshot.exists) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Phone number already in use. Please try a different number.',
+          ),
+        ),
+      );
+      return true;
+    }
+
+    return false; // User doesn't exist
   }
 
   Future<void> signUpWithPhone() async {
     setState(() {
       _isLoading = true;
     });
+    // First check if user already exists
+    bool userExists = await checkUserExists();
+    if (userExists) {
+      setState(() {
+        _isLoading = false;
+      });
+      return;
+    }
 
     await FirebaseAuth.instance.verifyPhoneNumber(
       phoneNumber: "+91${_phoneController.text.trim()}",
@@ -147,23 +236,19 @@ class _SignUpState extends State<SignUp> {
           _currentStep = 1; // Move to OTP step
         });
 
-       /* // Auto-populate username from email
+        /* // Auto-populate username from email
         if (_usernameController.text.isEmpty) {
           _usernameController.text = _emailController.text.split('@')[0];
         }*/
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('OTP sent to your phone.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('OTP sent to your phone.')));
       },
 
       codeAutoRetrievalTimeout: (String verificationId) {
         setState(() {
           _isLoading = false;
         });
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Timeout: Please try again')));
       },
     );
   }
@@ -190,13 +275,16 @@ class _SignUpState extends State<SignUp> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('OTP verification successful')));
-
+      // Then create email/password account
+      /* await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );*/
       setState(() {
         signUp = true;
         _isLoading = false;
         _currentStep = 2; // Move to profile setup step 1
       });
-
     } on FirebaseAuthException catch (e) {
       setState(() {
         _isLoading = false;
@@ -234,7 +322,9 @@ class _SignUpState extends State<SignUp> {
       }*/
 
       // Save all user data to Firebase Database
-      DatabaseReference userRef = FirebaseDatabase.instance.ref().child('users/$userId');
+      DatabaseReference userRef = FirebaseDatabase.instance.ref().child(
+        '${SmartLib.constPath}/$userId',
+      );
 
       // Save all user data in a single map
       Map<String, dynamic> userData = {
@@ -245,7 +335,8 @@ class _SignUpState extends State<SignUp> {
         'username': _usernameController.text.trim(),
         'gender': selectedGender,
         'fullName': _fullNameController.text.trim(),
-        'dateOfBirth': _selectedDate.toIso8601String(),
+        'dateOfBirth':
+            '${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
         'hasLocationPermission': _locationPermissionGranted,
         'profileCompleted': true,
         'profileCreatedAt': DateTime.now().toIso8601String(),
@@ -256,25 +347,27 @@ class _SignUpState extends State<SignUp> {
       await userRef.set(userData);
 
       // Update display name in Firebase Auth
-      await currentUser.updateDisplayName(_fullNameController.text.isNotEmpty
-          ? _fullNameController.text.trim()
-          : _usernameController.text.trim());
+      await currentUser.updateDisplayName(
+        _fullNameController.text.isNotEmpty
+            ? _fullNameController.text.trim()
+            : _usernameController.text.trim(),
+      );
 
       /*if (profileImageUrl != null) {
         await currentUser.updatePhotoURL(profileImageUrl);
       }*/
 
       // Show success message
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Profile setup successful!')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Profile setup successful!')));
 
       // Navigate to home screen
-
+      Navigator.push(context, MaterialPageRoute(builder: (context) => MarketPlace()));
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error saving profile: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error saving profile: $e')));
     } finally {
       setState(() {
         _isLoading = false;
@@ -291,24 +384,25 @@ class _SignUpState extends State<SignUp> {
         elevation: 0,
       ),
       body: SafeArea(
-        child: _isLoading
-            ? Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 20),
-              Text(
-                _getLoadingText(),
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        )
-            : _buildCurrentStep(),
+        child:
+            _isLoading
+                ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 20),
+                      Text(
+                        _getLoadingText(),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+                : _buildCurrentStep(),
       ),
     );
   }
@@ -388,7 +482,9 @@ class _SignUpState extends State<SignUp> {
                 if (value == null || value.isEmpty) {
                   return 'Please enter email address';
                 }
-                if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+                if (!RegExp(
+                  r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+                ).hasMatch(value)) {
                   return 'Please enter a valid email address';
                 }
                 return null;
@@ -418,7 +514,6 @@ class _SignUpState extends State<SignUp> {
               },
             ),
 
-
             SizedBox(height: 20),
 
             // Password Field
@@ -429,9 +524,7 @@ class _SignUpState extends State<SignUp> {
               prefixIcon: Icons.lock_outline,
               suffixIcon: IconButton(
                 icon: Icon(
-                  _isPasswordVisible
-                      ? Icons.visibility_off
-                      : Icons.visibility,
+                  _isPasswordVisible ? Icons.visibility_off : Icons.visibility,
                 ),
                 onPressed: () {
                   setState(() {
@@ -463,9 +556,7 @@ class _SignUpState extends State<SignUp> {
                   return 'Password must contain at least one number';
                 }
 
-                if (!RegExp(
-                  r'[!@#$%^&*(),.?":{}|<>]',
-                ).hasMatch(password)) {
+                if (!RegExp(r'[!@#$%^&*(),.?":{}|<>]').hasMatch(password)) {
                   return 'Password must contain at least one special character';
                 }
 
@@ -480,10 +571,9 @@ class _SignUpState extends State<SignUp> {
               text: "SEND OTP",
               onPressed: () {
                 if (_formKey.currentState!.validate()) {
-                  // signUpWithPhone(); // This will start the OTP verification process
+                  signUpWithPhone(); // This will start the OTP verification process
                 }
               },
-
             ),
             SizedBox(height: 20),
 
@@ -494,7 +584,10 @@ class _SignUpState extends State<SignUp> {
                 Text("Already have an account? "),
                 TextButton(
                   onPressed: () {
-                    // Navigator.pop(context); // Navigate to login page
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => Login()),
+                    ); // Navigate to login page
                   },
                   child: Text("Login"),
                 ),
@@ -539,11 +632,7 @@ class _SignUpState extends State<SignUp> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           SizedBox(height: 20),
-          Icon(
-            Icons.sms,
-            size: 80,
-            color: Colors.blue,
-          ),
+          Icon(Icons.sms, size: 80, color: Colors.blue),
           SizedBox(height: 20),
           Text(
             "OTP Verification",
@@ -557,10 +646,7 @@ class _SignUpState extends State<SignUp> {
           SizedBox(height: 20),
           Text(
             "We've sent a verification code to\n+91 ${_phoneController.text.trim()}",
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.black54,
-            ),
+            style: TextStyle(fontSize: 16, color: Colors.black54),
             textAlign: TextAlign.center,
           ),
           SizedBox(height: 40),
@@ -610,10 +696,7 @@ class _SignUpState extends State<SignUp> {
             ),
             child: Text(
               "VERIFY & PROCEED",
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
           ),
           SizedBox(height: 20),
@@ -644,27 +727,31 @@ class _SignUpState extends State<SignUp> {
     var count = 1;
     var total = 3;
 
-    return Container(
-      child: Column(
-        children: [
-          // Progress bar
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: w * 0.05, vertical: h * 0.07),
-            child: CustomProgressBar(currentStep: 2, totalSteps: 3),
+    return Column(
+      children: [
+        // Progress bar
+        Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: w * 0.05,
+            vertical: h * 0.07,
           ),
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Column(
+          child: CustomProgressBar(currentStep: count, totalSteps: total),
+        ),
+        SizedBox(height: 20),
+
+        Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Column(
                 children: [
                   SizedBox(
                     width: w / 1.1,
-                    height: h/2.3,
+                    height: h / 2.3,
                     child: Card(
                       color: Color(0xFF142E4F),
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20)),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
                       child: Padding(
                         padding: EdgeInsets.all(10),
                         child: Column(
@@ -680,16 +767,18 @@ class _SignUpState extends State<SignUp> {
                                   CircleAvatar(
                                     radius: 60,
                                     backgroundColor: Colors.lightBlue.shade900,
-                                    backgroundImage: _profileImage != null
-                                        ? FileImage(_profileImage!)
-                                        : null,
-                                    child: _profileImage == null
-                                        ? Icon(
-                                      Icons.person,
-                                      size: 60,
-                                      color: Colors.white,
-                                    )
-                                        : null,
+                                    backgroundImage:
+                                        _profileImage != null
+                                            ? FileImage(_profileImage!)
+                                            : null,
+                                    child:
+                                        _profileImage == null
+                                            ? Icon(
+                                              Icons.person,
+                                              size: 60,
+                                              color: Colors.white,
+                                            )
+                                            : null,
                                   ),
                                   Container(
                                     decoration: BoxDecoration(
@@ -697,15 +786,18 @@ class _SignUpState extends State<SignUp> {
                                       color: Colors.black,
                                     ),
                                     padding: EdgeInsets.all(7),
-                                    child: Icon(Icons.edit,
-                                        size: 28, color: Colors.white),
+                                    child: Icon(
+                                      Icons.edit,
+                                      size: 28,
+                                      color: Colors.white,
+                                    ),
                                   ),
                                 ],
                               ),
                             ),
                             SizedBox(height: 25),
                             Container(
-                              width: w/1.2,
+                              width: w / 1.2,
                               decoration: BoxDecoration(
                                 color: Color(0xFF1E3A5F),
                                 borderRadius: BorderRadius.circular(8),
@@ -735,10 +827,19 @@ class _SignUpState extends State<SignUp> {
                                     });
                                   },
                                   icon: Icon(Icons.female, color: Colors.white),
-                                  label: Text("Female", style: TextStyle(color: Colors.white)),
+                                  label: Text(
+                                    "Female",
+                                    style: TextStyle(color: Colors.white),
+                                  ),
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: selectedGender == "Female" ? Color(0xFF2196F3): Colors.grey[800],
-                                    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                    backgroundColor:
+                                        selectedGender == "Female"
+                                            ? Color(0xFF2196F3)
+                                            : Colors.grey[800],
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: 20,
+                                      vertical: 12,
+                                    ),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(10),
                                     ),
@@ -752,17 +853,26 @@ class _SignUpState extends State<SignUp> {
                                     });
                                   },
                                   icon: Icon(Icons.male, color: Colors.white),
-                                  label: Text("Male", style: TextStyle(color: Colors.white)),
+                                  label: Text(
+                                    "Male",
+                                    style: TextStyle(color: Colors.white),
+                                  ),
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: selectedGender == "Male" ? Colors.blue : Colors.grey[800],
-                                    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                    backgroundColor:
+                                        selectedGender == "Male"
+                                            ? Colors.blue
+                                            : Colors.grey[800],
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: 20,
+                                      vertical: 12,
+                                    ),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(10),
                                     ),
                                   ),
                                 ),
                               ],
-                            )
+                            ),
                           ],
                         ),
                       ),
@@ -770,23 +880,23 @@ class _SignUpState extends State<SignUp> {
                   ),
                 ],
               ),
-            ],
-          ),
 
-          Spacer(),
+          ],
+        ),
 
-          // Next button
-          NextButton(
-            isEnabled: _usernameController.text.trim().isNotEmpty,
-            onPressed: () {
-              setState(() {
-                _currentStep = 3; // Move to personal details step
-              });
-            },
-          ),
-          SizedBox(height: 20),
-        ],
-      ),
+        Spacer(),
+
+        // Next button
+        NextButton(
+          isEnabled: _usernameController.text.trim().isNotEmpty,
+          onPressed: () {
+            setState(() {
+              _currentStep = 3; // Move to personal details step
+            });
+          },
+        ),
+        SizedBox(height: 20),
+      ],
     );
   }
 
@@ -796,118 +906,116 @@ class _SignUpState extends State<SignUp> {
     var count = 2;
     var total = 3;
 
-    return Container(
-      child: Column(
-        children: [
-          // Progress bar
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: w * 0.05, vertical: h * 0.07),
-            child: CustomProgressBar(currentStep: 2, totalSteps: 3),
+    return Column(
+      children: [
+        // Progress bar
+        Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: w * 0.05,
+            vertical: h * 0.07,
           ),
+          child: CustomProgressBar(currentStep: count, totalSteps: total),
+        ),
+        SizedBox(height: 20),
+        Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: w / 1.1,
+              height: h / 2.3,
+              child: Card(
+                color: Color(0xFF142E4F),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Padding(
+                  padding: EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "Tell us more about yourself",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(height: 30),
 
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              SizedBox(
-                width: w / 1.1,
-                height: h / 2.3,
-                child: Card(
-                  color: Color(0xFF142E4F),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Padding(
-                    padding: EdgeInsets.all(20),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.start,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "Tell us more about yourself",
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
+                      // Full Name
+                      Container(
+                        width: w / 1.2,
+                        decoration: BoxDecoration(
+                          color: Color(0xFF1E3A5F),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.blue[200]!),
+                        ),
+                        padding: EdgeInsets.symmetric(horizontal: 12.0),
+                        child: TextFormField(
+                          controller: _fullNameController,
+                          style: TextStyle(color: Colors.white),
+                          decoration: InputDecoration(
+                            labelText: 'Full Name',
+                            labelStyle: TextStyle(color: Colors.white),
+                            border: InputBorder.none,
+                            hintText: 'Enter your full name',
+                            hintStyle: TextStyle(color: Colors.white70),
                           ),
                         ),
-                        SizedBox(height: 30),
+                      ),
 
-                        // Full Name
-                        Container(
+                      SizedBox(height: 30),
+
+                      // Date of Birth with date picker
+                      GestureDetector(
+                        onTap: () => _selectDate(context),
+                        child: Container(
                           width: w / 1.2,
                           decoration: BoxDecoration(
                             color: Color(0xFF1E3A5F),
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(color: Colors.blue[200]!),
                           ),
-                          padding: EdgeInsets.symmetric(horizontal: 12.0),
-                          child: TextFormField(
-                            controller: _fullNameController,
-                            style: TextStyle(color: Colors.white),
-                            decoration: InputDecoration(
-                              labelText: 'Full Name',
-                              labelStyle: TextStyle(color: Colors.white),
-                              border: InputBorder.none,
-                              hintText: 'Enter your full name',
-                              hintStyle: TextStyle(color: Colors.white70),
-                            ),
-                          ),
-                        ),
-
-                        SizedBox(height: 30),
-
-                        // Date of Birth with date picker
-                        GestureDetector(
-                          onTap: () => _selectDate(context),
-                          child: Container(
-                            width: w / 1.2,
-                            decoration: BoxDecoration(
-                              color: Color(0xFF1E3A5F),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.blue[200]!),
-                            ),
-                            padding: EdgeInsets.all(16),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  'DOB: ${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                                Icon(
-                                  Icons.calendar_today,
+                          padding: EdgeInsets.all(16),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'DOB: ${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
+                                style: TextStyle(
                                   color: Colors.white,
+                                  fontSize: 16,
                                 ),
-                              ],
-                            ),
+                              ),
+                              Icon(Icons.calendar_today, color: Colors.white),
+                            ],
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
+        ),
 
-          Spacer(),
+        Spacer(),
 
-          // Next button
-          NextButton(
-            isEnabled: _fullNameController.text.trim().isNotEmpty,
-            onPressed: () {
-              setState(() {
-                _currentStep = 4; // Move to location permissions step
-              });
-            },
-          ),
-          SizedBox(height: 20),
-        ],
-      ),
+        // Next button
+        NextButton(
+          isEnabled: _fullNameController.text.trim().isNotEmpty,
+          onPressed: () {
+            setState(() {
+              _currentStep = 4; // Move to location permissions step
+            });
+          },
+        ),
+        SizedBox(height: 20),
+      ],
     );
   }
 
@@ -922,73 +1030,83 @@ class _SignUpState extends State<SignUp> {
         children: [
           // Progress bar
           Padding(
-            padding: EdgeInsets.symmetric(horizontal: w * 0.05, vertical: h * 0.07),
-            child: CustomProgressBar(currentStep: 1, totalSteps: 3),
+            padding: EdgeInsets.symmetric(
+              horizontal: w * 0.05,
+              vertical: h * 0.07,
+            ),
+            child: CustomProgressBar(currentStep: count, totalSteps: total),
           ),
+          SizedBox(height: 20),
 
           Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.center,
+            // mainAxisAlignment: MainAxisAlignment.start,
             children: [
+              // Location Icon
+              Container(
+                decoration: BoxDecoration(
+                  color: Color(0xFF012634),
+                  shape: BoxShape.circle,
+                ),
+                padding: const EdgeInsets.all(30),
+                child: const Icon(
+                  Icons.location_on,
+                  color: Color(0xFF00BBFF),
+                  size: 100,
+                ),
+              ),
+              const SizedBox(height: 30),
+
+              // Title
+              const Text(
+                "Your Location?",
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+
+              const SizedBox(height: 15),
+
+              // Subtitle
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 40),
+                child: Text(
+                  "We need access to your location to provide you with nearby services and recommendations.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white70, fontSize: 16),
+                ),
+              ),
+
+              const SizedBox(height: 40),
+
+              // Primary Button
               SizedBox(
-                width: w / 1.1,
-                height: h / 2.3,
-                child: Card(
-                  color: Color(0xFF142E4F),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
+                width: w * 0.8,
+                height: 50,
+                child: ElevatedButton(
+                  onPressed:
+                      _locationPermissionGranted
+                          ? null
+                          : _requestLocationPermission,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor:
+                        _locationPermissionGranted
+                            ? Colors.green
+                            : Color(0xFF2196F3),
+                    padding: EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
-                  child: Padding(
-                    padding: EdgeInsets.all(20),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.location_on,
-                          size: 80,
-                          color: Colors.white,
-                        ),
-                        SizedBox(height: 20),
-                        Text(
-                          "Location Access",
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        SizedBox(height: 15),
-                        Text(
-                          "We need access to your location to provide you with nearby services and recommendations.",
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 16,
-                          ),
-                        ),
-                        SizedBox(height: 30),
-                        ElevatedButton(
-                          onPressed: _locationPermissionGranted ? null : _requestLocationPermission,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: _locationPermissionGranted ? Colors.green : Color(0xFF2196F3),
-                            padding: EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                          child: Text(
-                            _locationPermissionGranted
-                                ? "Permission Granted"
-                                : "Allow Location Access",
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
+                  child: Text(
+                    _locationPermissionGranted
+                        ? "Permission Granted"
+                        : "Allow Location Access",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
@@ -999,18 +1117,17 @@ class _SignUpState extends State<SignUp> {
           Spacer(),
 
           // Complete button
-          NextButton(
-            isEnabled: true, // Location permission is optional
+          SolidButton(
             onPressed: () {
               _finishProfileSetup();
             },
+            text: 'Complete Profile',
           ),
           SizedBox(height: 20),
         ],
       ),
     );
   }
-
 
   @override
   void dispose() {
@@ -1023,5 +1140,3 @@ class _SignUpState extends State<SignUp> {
     super.dispose();
   }
 }
-
-

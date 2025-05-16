@@ -1,4 +1,6 @@
+import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
+import 'package:smartlib/logic/string.dart';
 import 'package:smartlib/user-pages/select_page.dart';
 import 'package:smartlib/widgets/solid_button.dart';
 
@@ -13,9 +15,64 @@ class Login extends StatefulWidget {
 
 class _LoginState extends State<Login> {
   final _formKey = GlobalKey<FormState>();
-  TextEditingController _emailController = TextEditingController();
-  TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+
+  DatabaseReference databaseRef = FirebaseDatabase.instance.ref();
   bool _isPasswordVisible = true;
+
+  Future<bool> _userLogin() async {
+    // Check if email and password fields are not empty
+    if (_emailController.text.trim().isNotEmpty &&
+        _passwordController.text.trim().isNotEmpty) {
+      try {
+        // Query users by email
+        final usersSnapshot =
+            await databaseRef
+                .child(SmartLib.constPath)
+                .orderByChild(SmartLib.constEmail)
+                .equalTo(_emailController.text.trim())
+                .once();
+
+        // Check if we found a user with this email
+        if (usersSnapshot.snapshot.exists) {
+          // Get the first user that matches (emails should be unique)
+          final userMap = Map<String, dynamic>.from(
+            usersSnapshot.snapshot.value as Map,
+          );
+
+          final userId = userMap.keys.first;
+          final userData = userMap[userId];
+
+          // Check if password matches
+          if (userData['password'] == _passwordController.text.trim()) {
+            // Login successful
+            SmartLib.email = _emailController.text.trim();
+            // You might want to store the userId as well
+            // SmartLib.userId = userId;
+            print('Login successful');
+            return true;
+          } else {
+            // Password doesn't match
+            print('Incorrect password');
+            return false;
+          }
+        } else {
+          // No user found with this email
+          print('No account found with this email');
+          return false;
+        }
+      } catch (e) {
+        print('Error during login: $e');
+        return false;
+      }
+    } else {
+      // Email or password field is empty
+      print('Please enter email and password');
+      return false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     double width = MediaQuery.of(context).size.width;
@@ -122,7 +179,7 @@ class _LoginState extends State<Login> {
                   ),
                 ),
               ),
-              SolidButton(text: "Login", onPressed: () {}),
+              SolidButton(text: "Login", onPressed: _userLogin,width: width,),
 
               Row(
                 children: [

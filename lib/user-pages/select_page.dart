@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
+import 'package:smartlib/user-pages/sign_up.dart';
 
 import 'Login.dart';
 
@@ -15,7 +16,7 @@ class _SelectPageState extends State<SelectPage> {
   Widget build(BuildContext context) {
     final double width = MediaQuery.of(context).size.width;
     final double height = MediaQuery.of(context).size.height;
-    return  Scaffold(
+    return Scaffold(
       backgroundColor: Colors.black87,
       body: SafeArea(
         child: Padding(
@@ -50,21 +51,25 @@ class _SelectPageState extends State<SelectPage> {
                       ),
                       Gap(10),
                       GestureDetector(
-                        onTap: (){
+                        onTap: () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (context) => Login()),
+                            MaterialPageRoute(builder: (context) => SignUp()),
                           );
                         },
                         child: Card(
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20),),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
 
                           child: Container(
-                            width: width*0.4,
-                            height: height*0.3,
+                            width: width * 0.4,
+                            height: height * 0.3,
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(20),
-                              gradient: LinearGradient(colors: [Colors.blueAccent,Colors.lightBlue])
+                              gradient: LinearGradient(
+                                colors: [Colors.blueAccent, Colors.lightBlue],
+                              ),
                             ),
                           ),
                         ),
@@ -82,15 +87,22 @@ class _SelectPageState extends State<SelectPage> {
                           letterSpacing: 0.5,
                         ),
                       ),
-                      SizedBox(height: 10,),
+                      SizedBox(height: 10),
                       Card(
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20),),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
                         child: Container(
-                          width: width*0.4,
-                          height: height*0.3,
+                          width: width * 0.4,
+                          height: height * 0.3,
                           decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(20),
-                              gradient: LinearGradient(colors: [Colors.deepOrangeAccent,Colors.orangeAccent])
+                            borderRadius: BorderRadius.circular(20),
+                            gradient: LinearGradient(
+                              colors: [
+                                Colors.deepOrangeAccent,
+                                Colors.orangeAccent,
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -98,42 +110,41 @@ class _SelectPageState extends State<SelectPage> {
                   ),
                 ],
               ),
-             Column(
-               children: [
-                 const Text(
-                   "Already have an account ?",
-                   textAlign: TextAlign.center,
-                   style: TextStyle(
-                     color: Colors.white70,
-                     fontSize: 14,
-                     letterSpacing: 0.2,
-                   ),
-                 ),
-                 SizedBox(height: 10,),
-                 ElevatedButton(
-                   onPressed: () {
-                     Navigator.of(context).pop();
-                   },
-                   style: ElevatedButton.styleFrom(
-                     backgroundColor: Colors.blueGrey,
-                     minimumSize: Size(width*0.5, 55),
-                     shape: RoundedRectangleBorder(
-                       borderRadius: BorderRadius.circular(25),
-                     ),
-                     elevation: 5,
-                   ),
-                   child: const Text(
-                     "Login",
-                     style: TextStyle(
-                       fontWeight: FontWeight.bold,
-                       color: Colors.white,
-                       fontSize: 16,
-                     ),
-                   ),
-                 ),
-               ],
-             )
-
+              Column(
+                children: [
+                  const Text(
+                    "Already have an account ?",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 14,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                  SizedBox(height: 10),
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blueGrey,
+                      minimumSize: Size(width * 0.5, 55),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(25),
+                      ),
+                      elevation: 5,
+                    ),
+                    child: const Text(
+                      "Login",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
         ),

@@ -27,21 +27,23 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'YOUR-API-KEY',
-    appId: 'YOUR-APP-ID',
+    apiKey: 'AIzaSyCAlx65BmNjkgpLT63KFASr0SleKL4VvTA',
+    appId: '1:1089242082795:android:4d504e94e36140ca817dae',
     messagingSenderId: 'YOUR-MESSAGING-SENDER-ID',
-    projectId: 'YOUR-PROJECT-ID',
+    projectId: 'smart-lib-41db1',
     authDomain: 'YOUR-AUTH-DOMAIN',
     storageBucket: 'YOUR-STORAGE-BUCKET',
     measurementId: 'YOUR-MEASUREMENT-ID',
+    databaseURL: 'https://smart-lib-41db1-default-rtdb.asia-southeast1.firebasedatabase.app/'
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'YOUR-API-KEY',
-    appId: 'YOUR-APP-ID',
+    apiKey: 'AIzaSyCAlx65BmNjkgpLT63KFASr0SleKL4VvTA',
+    appId: '1:1089242082795:android:4d504e94e36140ca817dae',
     messagingSenderId: 'YOUR-MESSAGING-SENDER-ID',
-    projectId: 'YOUR-PROJECT-ID',
+    projectId: 'smart-lib-41db1',
     storageBucket: 'YOUR-STORAGE-BUCKET',
+    databaseURL: 'https://smart-lib-41db1-default-rtdb.asia-southeast1.firebasedatabase.app/'
   );
 
   static const FirebaseOptions ios = FirebaseOptions(

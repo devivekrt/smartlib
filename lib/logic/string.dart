@@ -1,18 +1,21 @@
-class SmartLib{
-  static const  String  authId = "authId";
-  static const  String  password = "password";
-  static const  String  userId = "userId";
+class SmartLib {
+  static const String constPath = 'users';
+  static const String constAuthId = "authId";
+  static const String constPassword = "password";
+  static const String constUserId = "userId";
   //student data list
-  static const  String  name = "Name";
-  static const  String  email = "Email";
-  static const  String  phone = "Phone";
-  static const  String  dob = "Dob";
-  static const  String  gender = "Gender";
+  static const String constName = "name";
+  static const String constEmail = "email";
+  static const String constPhone = "phone";
+  static const String constDob = "dateOfBirth";
+  static const String constGender = "gender";
+  static String email = "";
+  static String password = "";
   //library list
-  static const  String  libraryName = "libraryName";
-  static const  String  noOfSeat= "noOfSeat";
-  static const  String  libraryLocation = "libraryLocation";
-  static const  String  libraryState = "libraryState";
-  static const  String  libraryDistrict = "libraryDistrict";
-  static const  String  libraryPincode = "libraryPincode";
+  static const String libraryName = "libraryName";
+  static const String noOfSeat = "noOfSeat";
+  static const String libraryLocation = "libraryLocation";
+  static const String libraryState = "libraryState";
+  static const String libraryDistrict = "libraryDistrict";
+  static const String libraryPincode = "libraryPincode";
 }
