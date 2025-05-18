@@ -30,29 +30,47 @@ class _LibDetailState extends State<LibDetail> {
     final theme = Theme.of(context);
     final border = theme.colorScheme.secondary;
 
-    return Scaffold(
-      floatingActionButton: Padding(
-        padding: EdgeInsets.all(20),
-        child: Container(
+    return SafeArea(
+      child: Scaffold(
+        floatingActionButton: Container(
           height: 70,
+          margin: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          padding: EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: Colors.black,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(25),
+            border: Border.all(color: Colors.white, width: 0.5),
           ),
-          width: width,
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              SolidButton(text: "Skip", onPressed: () {}),
-              SolidButton(text: "Book Now", onPressed: () {}),
+              // Find New button
+              Expanded(
+                child: SolidButton(
+                  text: "Skip",
+                  onPressed: () {},
+                  buttonColor: Colors.transparent,
+                  borderColor: Colors.orange,
+                  width: double.infinity,
+                  height: 50,
+                ),
+              ),
+              SizedBox(width: 8),
+              // Joined button with only border
+              Expanded(
+                child: SolidButton(
+                  text: "Book",
+                  onPressed: () {},
+                  buttonColor: Colors.orange,
+                  borderColor: Colors.transparent,
+                  width: double.infinity,
+                  height: 50,
+                ),
+              ),
             ],
           ),
         ),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+        floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
 
-      body: SafeArea(
-        child: Padding(
+        body: Padding(
           padding: const EdgeInsets.all(20.0),
           child: SingleChildScrollView(
             child: Column(

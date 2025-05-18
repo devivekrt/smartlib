@@ -1,9 +1,13 @@
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:smartlib/logic/string.dart';
+import 'package:smartlib/user-pages/home_page.dart';
+import 'package:smartlib/user-pages/market_place.dart';
 import 'package:smartlib/user-pages/select_page.dart';
 import 'package:smartlib/widgets/solid_button.dart';
 
+import '../function/users_function.dart';
 import '../widgets/input_field.dart';
 
 class Login extends StatefulWidget {
@@ -20,56 +24,120 @@ class _LoginState extends State<Login> {
 
   DatabaseReference databaseRef = FirebaseDatabase.instance.ref();
   bool _isPasswordVisible = true;
+  bool _isLoading = false;
 
-  Future<bool> _userLogin() async {
+  Future<void> _userLogin() async {
+    setState(() {
+      _isLoading = true;
+    });
     // Check if email and password fields are not empty
-    if (_emailController.text.trim().isNotEmpty &&
-        _passwordController.text.trim().isNotEmpty) {
+    if (_formKey.currentState!.validate()) {
       try {
-        // Query users by email
-        final usersSnapshot =
+        bool isAuthenticated = false;
+        String userRole = "";
+
+        // Try to authenticate as student
+        DatabaseEvent studentSnapshot =
             await databaseRef
-                .child(SmartLib.constPath)
+                .child("${SmartLib.constPath}/student")
                 .orderByChild(SmartLib.constEmail)
                 .equalTo(_emailController.text.trim())
                 .once();
 
-        // Check if we found a user with this email
-        if (usersSnapshot.snapshot.exists) {
-          // Get the first user that matches (emails should be unique)
-          final userMap = Map<String, dynamic>.from(
-            usersSnapshot.snapshot.value as Map,
-          );
+        if (studentSnapshot.snapshot.exists) {
+          // Get the user data
+          Map<dynamic, dynamic>? users = studentSnapshot.snapshot.value as Map?;
+          if (users != null) {
+            // Find the user with matching email
+            String userId = users.keys.first.toString();
+            Map<dynamic, dynamic> userData = users[userId] as Map;
 
-          final userId = userMap.keys.first;
-          final userData = userMap[userId];
-
-          // Check if password matches
-          if (userData['password'] == _passwordController.text.trim()) {
-            // Login successful
-            SmartLib.email = _emailController.text.trim();
-            // You might want to store the userId as well
-            // SmartLib.userId = userId;
-            print('Login successful');
-            return true;
-          } else {
-            // Password doesn't match
-            print('Incorrect password');
-            return false;
+            // Check password
+            if (userData[SmartLib.constPassword] ==
+                _passwordController.text.trim()) {
+              isAuthenticated = true;
+              userRole = 'student';
+              SmartLib.email = _emailController.text.trim();
+              // You might want to store user ID too
+              SmartLib.userId = userId;
+            }
           }
+        }
+
+        // If not authenticated as student, try librarian
+        if (!isAuthenticated) {
+          DatabaseEvent librarianSnapshot =
+              await databaseRef
+                  .child("${SmartLib.constPath}/librarian")
+                  .orderByChild(SmartLib.constEmail)
+                  .equalTo(_emailController.text.trim())
+                  .once();
+
+          if (librarianSnapshot.snapshot.exists) {
+            // Get the user data
+            Map<dynamic, dynamic>? users =
+                librarianSnapshot.snapshot.value as Map?;
+            if (users != null) {
+              // Find the user with matching email
+              String userId = users.keys.first.toString();
+              Map<dynamic, dynamic> userData = users[userId] as Map;
+
+              // Check password
+              if (userData[SmartLib.constPassword] ==
+                  _passwordController.text.trim()) {
+                isAuthenticated = true;
+                userRole = 'librarian';
+                SmartLib.email = _emailController.text.trim();
+                // You might want to store user ID too
+                SmartLib.userId = userId;
+              }
+            }
+          }
+        }
+
+        // Handle authentication result
+        if (isAuthenticated) {
+          // Save session data
+          await AuthService.saveUserSession(SmartLib.userId, userRole);
+
+          // Navigate to appropriate screen based on role
+          if (userRole == 'student') {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => MarketPlace(isSignedUp: false),
+              ),
+            );
+          } else if (userRole == 'librarian') {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => HomePage()),
+            );
+          }
+
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Login Successfully!')));
+          setState(() {
+            _isLoading = false;
+          });
         } else {
-          // No user found with this email
-          print('No account found with this email');
-          return false;
+          // No match found or password incorrect
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Invalid email or password')));
+          setState(() {
+            _isLoading = false;
+          });
         }
       } catch (e) {
-        print('Error during login: $e');
-        return false;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Login error: Please try again.')),
+        );
+        setState(() {
+          _isLoading = false;
+        });
       }
-    } else {
-      // Email or password field is empty
-      print('Please enter email and password');
-      return false;
     }
   }
 
@@ -77,131 +145,129 @@ class _LoginState extends State<Login> {
   Widget build(BuildContext context) {
     double width = MediaQuery.of(context).size.width;
     double height = MediaQuery.of(context).size.height;
-    return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              Column(
-                children: [
-                  Text(
-                    "Login",
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                  Text(
-                    "Welcome back, LibTrack provides right place to Study and manage catalogs",
-                    style: TextStyle(fontSize: 16, color: Colors.white),
-                  ),
-                ],
-              ),
-              Container(
-                padding: EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.blue),
-                ),
-                width: width,
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    children: [
-                      InputField(
-                        controller: _emailController,
-                        labelText: 'Email',
-                        prefixIcon: Icons.email,
-                        keyboardType: TextInputType.emailAddress,
-                        validator: (value) {
-                          if (value == null ||
-                              value.isEmpty ||
-                              !RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
-                            return 'Please enter a valid email';
-                          }
-                          return null;
-                        },
+    return SafeArea(
+      child:
+          _isLoading == true
+              ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 20),
+                    Text(
+                      "Logging User...",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
                       ),
-                      InputField(
-                        controller: _passwordController,
-                        labelText: 'Password',
-                        isPassword: _isPasswordVisible,
-                        prefixIcon: Icons.lock_outline,
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _isPasswordVisible
-                                ? Icons.visibility_off
-                                : Icons.visibility,
+                    ),
+                  ],
+                ),
+              )
+              : Scaffold(
+                appBar: AppBar(
+                  title: Text("Login"),
+                  centerTitle: true,
+                  elevation: 0,
+                ),
+                body: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Title
+                        Text(
+                          "Welcome Back",
+                          style: TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
                           ),
-                          onPressed: () {
-                            setState(() {
-                              _isPasswordVisible = !_isPasswordVisible;
-                            });
+                          textAlign: TextAlign.center,
+                        ),
+                        SizedBox(height: 30),
+
+                        // Email Field - Using InputField widget
+                        InputField(
+                          controller: _emailController,
+                          keyboardType: TextInputType.emailAddress,
+                          labelText: 'Email Address',
+                          prefixIcon: Icons.email_outlined,
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return 'Please enter email address';
+                            }
+                            if (!RegExp(
+                              r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+                            ).hasMatch(value)) {
+                              return 'Please enter a valid email address';
+                            }
+                            return null;
                           },
                         ),
-                        maxLines: 1,
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Please enter your password';
-                          }
+                        SizedBox(height: 20),
 
-                          String password = value.trim();
+                        // Password Field - Using InputField widget
+                        InputField(
+                          controller: _passwordController,
+                          labelText: 'Password',
+                          isPassword: _isPasswordVisible,
+                          prefixIcon: Icons.lock_outline,
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _isPasswordVisible
+                                  ? Icons.visibility_off
+                                  : Icons.visibility,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _isPasswordVisible = !_isPasswordVisible;
+                              });
+                            },
+                          ),
+                          maxLines: 1,
+                        ),
+                        SizedBox(height: 40),
 
-                          if (password.length < 8) {
-                            return 'Password should be at least 8 characters';
-                          }
+                        // Sign Up Button - Using SolidButton widget
+                        SolidButton(
+                          text: "Login",
+                          width: double.infinity,
+                          height: 50,
+                          onPressed: () {
+                            if (_formKey.currentState!.validate()) {
+                              _userLogin(); // This will start the OTP verification process
+                            }
+                          },
+                        ),
+                        SizedBox(height: 20),
 
-                          if (!RegExp(r'[a-z]').hasMatch(password)) {
-                            return 'Password must contain at least one lowercase letter';
-                          }
-
-                          if (!RegExp(r'[A-Z]').hasMatch(password)) {
-                            return 'Password must contain at least one uppercase letter';
-                          }
-
-                          if (!RegExp(r'\d').hasMatch(password)) {
-                            return 'Password must contain at least one number';
-                          }
-
-                          if (!RegExp(
-                            r'[!@#$%^&*(),.?":{}|<>]',
-                          ).hasMatch(password)) {
-                            return 'Password must contain at least one special character';
-                          }
-
-                          return null;
-                        },
-                      ),
-                    ],
+                        // Already have an account option
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text("Already have an account? "),
+                            TextButton(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => Login(),
+                                  ),
+                                ); // Navigate to login page
+                              },
+                              child: Text("Login"),
+                            ),
+                          ],
+                        ),
+                        // Add extra padding to ensure content is visible above keyboard
+                        SizedBox(height: 20),
+                      ],
+                    ),
                   ),
                 ),
               ),
-              SolidButton(text: "Login", onPressed: _userLogin,width: width,),
-
-              Row(
-                children: [
-                  Text(
-                    "Don't have a account ?",
-                    style: TextStyle(fontSize: 16, color: Colors.white),
-                  ),
-                  TextButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => SelectPage()),
-                      );
-                    },
-                    child: Text("SignUp"),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

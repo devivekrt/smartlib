@@ -11,6 +11,7 @@ class SmartLib {
   static const String constGender = "gender";
   static String email = "";
   static String password = "";
+  static String userId = "";
   //library list
   static const String libraryName = "libraryName";
   static const String noOfSeat = "noOfSeat";

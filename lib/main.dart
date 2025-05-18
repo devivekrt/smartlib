@@ -8,12 +8,14 @@ import 'package:smartlib/user-pages/market_place.dart';
 import 'package:smartlib/user-pages/select_page.dart';
 import 'package:smartlib/user-pages/sign_up.dart';
 import 'package:smartlib/user-pages/splash_screen.dart';
+import 'package:smartlib/user-pages/success_page.dart';
 
 import 'firebase_options.dart';
 
 void main() async{
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+  await Firebase.initializeApp(
+  );
   runApp(const MyApp());
 }
 
@@ -26,7 +28,8 @@ class MyApp extends StatelessWidget {
       title: "Smart-Lib",
       theme: darkTheme,
       debugShowCheckedModeBanner: false,
-      home: SignUp(),
+
+      home: SelectPage(),
     );
   }
 }

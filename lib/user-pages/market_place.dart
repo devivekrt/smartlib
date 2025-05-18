@@ -1,7 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:smartlib/user-pages/home_page.dart';
+import 'package:smartlib/widgets/solid_button.dart';
+
+import '../theme/theme.dart';
 
 class MarketPlace extends StatefulWidget {
-  const MarketPlace({super.key});
+  // Add signup parameter to determine which UI to show
+  final bool isSignedUp;
+
+  const MarketPlace({
+    super.key,
+    required this.isSignedUp, // Default to true if not specified
+  });
 
   @override
   State<MarketPlace> createState() => _MarketPlaceState();
@@ -35,34 +45,276 @@ class _MarketPlaceState extends State<MarketPlace> {
     },
   ];
 
+  // Track which tab is active
+  bool _showFindNew = true;
+
+  void _showSortOptions() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Color(0xFF1E2A38),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(15)),
+      ),
+      builder:
+          (context) => Container(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Sort By",
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                SizedBox(height: 15),
+                _buildSortOption("Price: Low to High"),
+                _buildSortOption("Price: High to Low"),
+                _buildSortOption("Rating: High to Low"),
+                _buildSortOption("Most Reviews"),
+                _buildSortOption("Most Popular"),
+              ],
+            ),
+          ),
+    );
+  }
+
+  Widget _buildSortOption(String title) {
+    return InkWell(
+      onTap: () {
+        // Implement sorting logic here
+      },
+      child: Container(
+        width: double.infinity,
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: Text(
+          title,
+          style: TextStyle(fontSize: 16, color: Colors.white70),
+        ),
+      ),
+    );
+  }
+
+  void _showFilterOptions() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Color(0xFF1E2A38),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(15)),
+      ),
+      builder:
+          (context) => Container(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Filter Options",
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                SizedBox(height: 15),
+                _buildFilterOption("Rating (4+)"),
+                _buildFilterOption("Open Now"),
+                _buildFilterOption("24x7 Access"),
+                _buildFilterOption("Distance (< 3km)"),
+                SizedBox(height: 15),
+                SolidButton(
+                  text: "Apply Filters",
+                  width: double.infinity,
+                  height: 45,
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+          ),
+    );
+  }
+
+  Widget _buildFilterOption(String title) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        children: [
+          Text(title, style: TextStyle(fontSize: 16, color: Colors.white70)),
+          Spacer(),
+          Switch(
+            value: false,
+            onChanged: (value) {
+              // Implement filter logic here
+            },
+            activeColor: Colors.blue,
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.of(context).size.width;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Library Marketplace", style: TextStyle(color: Colors.white)),
-        centerTitle: true,
-        elevation: 0,
-      ),
-      body: SafeArea(
-        child: ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: libraries.length,
-          itemBuilder: (context, index) {
-            final lib = libraries[index];
-            return LibraryCard(
-              name: lib["name"],
-              rating: lib["rating"],
-              reviews: lib["reviews"],
-              students: lib["students"],
-              fee: lib["fee"],
-              tag: lib["tag"],
-              width: width,
-            );
-          },
+    return SafeArea(
+      child: Scaffold(
+        appBar: AppBar(
+          automaticallyImplyLeading: !widget.isSignedUp,
+         /* leading:
+              widget.isSignedUp
+                  ? null // No back button when signed up
+                  : IconButton(
+                    icon: Icon(Icons.arrow_back, color: Colors.white),
+                    onPressed: () => Navigator.pop(context),
+                  ),*/
+          title: const Text(
+            "Library Marketplace",
+            style: TextStyle(color: Colors.white),
+          ),
+          centerTitle: true,
+          elevation: 0,
+          actions: [
+            // Sort and filter icons always shown
+            IconButton(
+              icon: Icon(Icons.sort, color: Colors.white),
+              onPressed: _showSortOptions,
+            ),
+            IconButton(
+              icon: Icon(Icons.filter_list, color: Colors.white),
+              onPressed: _showFilterOptions,
+            ),
+          ],
+        ),
+        // Book Later button only shown when signed up
+        floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+        bottomNavigationBar:
+            widget.isSignedUp
+                ? Padding(
+                  padding: EdgeInsets.fromLTRB(20, 0, 20, 0),
+                  child: SolidButton(
+                    text: "Book Later",
+                    onPressed: () {
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(builder: (context) => HomePage()),
+                      );
+                    },
+                    width: double.infinity,
+                  ),
+                )
+                : null,
+        body: Column(
+          children: [
+            // Only show custom tab buttons when not signed up
+            if (!widget.isSignedUp)
+              Container(
+                height: 70,
+                margin: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                padding: EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(25),
+                  border: Border.all(color: Colors.white, width: 0.5),
+                ),
+                child: Row(
+                  children: [
+                    // Find New button
+                    Expanded(
+                      child: SolidButton(
+                        text: "Find New",
+                        onPressed: () {
+                          setState(() {
+                            _showFindNew = true;
+                          });
+                        },
+                        buttonColor:
+                            _showFindNew ? DarkColor.primary : Colors.transparent,
+                        borderColor:
+                            _showFindNew ? Colors.transparent : DarkColor.primary,
+                        width: double.infinity,
+                        height: 50,
+                      ),
+                    ),
+                    SizedBox(width: 8),
+                    // Joined button with only border
+                    Expanded(
+                      child: SolidButton(
+                        text: "Joined",
+                        onPressed: () {
+                          setState(() {
+                            _showFindNew = false;
+                          });
+                        },
+                        buttonColor:
+                            !_showFindNew ? DarkColor.primary : Colors.transparent,
+                        borderColor:
+                            !_showFindNew ? Colors.transparent : DarkColor.primary,
+                        width: double.infinity,
+                        height: 50,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+            // Library list content
+            Expanded(
+              child:
+                  widget.isSignedUp
+                      ? _buildLibraryList(width)
+                      : (_showFindNew
+                          ? _buildLibraryList(width)
+                          : _buildLastJoinedList(width)),
+            ),
+          ],
         ),
       ),
+    );
+  }
+
+  Widget _buildLibraryList(double width) {
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: libraries.length,
+      itemBuilder: (context, index) {
+        final lib = libraries[index];
+        return LibraryCard(
+          name: lib["name"],
+          rating: lib["rating"],
+          reviews: lib["reviews"],
+          students: lib["students"],
+          fee: lib["fee"],
+          tag: lib["tag"],
+          width: width,
+        );
+      },
+    );
+  }
+
+  Widget _buildLastJoinedList(double width) {
+    // You can customize this to show different data for Last Joined
+    // For now, we'll use the same data with a different arrangement
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: libraries.length,
+      itemBuilder: (context, index) {
+        // Reverse the order for demonstration
+        final lib = libraries[libraries.length - 1 - index];
+        return LibraryCard(
+          name: lib["name"],
+          rating: lib["rating"],
+          reviews: lib["reviews"],
+          students: lib["students"],
+          fee: lib["fee"],
+          tag: "Joined", // Change the tag for Last Joined
+          width: width,
+        );
+      },
     );
   }
 }
@@ -90,7 +342,10 @@ class LibraryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      shape: OutlineInputBorder(borderRadius: BorderRadius.circular(16),borderSide: BorderSide(color: Color(0xFF6b7280))),
+      shape: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: Color(0xFF6b7280)),
+      ),
       margin: const EdgeInsets.only(bottom: 20),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -126,17 +381,20 @@ class LibraryCard extends StatelessWidget {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
-                    color: Colors.amber.withOpacity(0.1),
-                    border: Border.all(color: Colors.amber),
+                    color: DarkColor.green.withOpacity(0.1),
+                    border: Border.all(color: DarkColor.green),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
                     tag,
-                    style: const TextStyle(color: Colors.amber, fontSize: 12),
+                    style: const TextStyle(color: DarkColor.green, fontSize: 12),
                   ),
-                )
+                ),
               ],
             ),
             const SizedBox(height: 8),
@@ -166,10 +424,13 @@ class LibraryCard extends StatelessWidget {
               children: [
                 const SizedBox(),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.amber),
+                    border: Border.all(color: DarkColor.primary),
                     color: Colors.white.withOpacity(0.05),
                   ),
                   child: Row(
@@ -177,7 +438,7 @@ class LibraryCard extends StatelessWidget {
                       Text(
                         "\$$fee",
                         style: const TextStyle(
-                          color: Colors.amber,
+                          color: DarkColor.primary,
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),
@@ -186,12 +447,12 @@ class LibraryCard extends StatelessWidget {
                       const Text(
                         "/month",
                         style: TextStyle(color: Colors.white70, fontSize: 12),
-                      )
+                      ),
                     ],
                   ),
-                )
+                ),
               ],
-            )
+            ),
           ],
         ),
       ),
