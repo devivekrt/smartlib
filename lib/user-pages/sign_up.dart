@@ -1,23 +1,20 @@
-import 'dart:io';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:geolocator/geolocator.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:pinput/pinput.dart';
-import 'package:smartlib/theme/theme.dart';
-import 'package:smartlib/user-pages/market_place.dart';
+import 'package:smartlib/user-pages/student_profile_setup.dart'; // Import student profile page
 import 'package:smartlib/user-pages/Login.dart';
-import 'package:smartlib/user-pages/success_page.dart';
-import 'package:smartlib/widgets/input_field.dart'; // Import InputField
-import 'package:smartlib/widgets/solid_button.dart'; // Import SolidButton
-import 'package:smartlib/widgets/next_button.dart'; // Import NextButton
-import '../function/owner_function.dart';
+import 'package:smartlib/widgets/input_field.dart';
+import 'package:smartlib/widgets/solid_button.dart';
 import '../function/users_function.dart';
-import '../widgets/linear_progress.dart';
+import '../owner-pages/librarian_profile_setup.dart';
+
+// Define user types
+enum UserType { student, librarian }
 
 class SignUp extends StatefulWidget {
-  const SignUp({super.key});
+  final UserType userType;
+
+  const SignUp({Key? key, required this.userType}) : super(key: key);
 
   @override
   State<SignUp> createState() => _SignUpState();
@@ -29,77 +26,17 @@ class _SignUpState extends State<SignUp> {
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _otpController = TextEditingController();
-  final TextEditingController _usernameController = TextEditingController();
-  final TextEditingController _fullNameController = TextEditingController();
-  final TextEditingController _addressController = TextEditingController();
 
   String? verificationId;
   bool? optSent = false;
-  bool? signUp = false;
-  String selectedGender = "";
   bool _isLoading = false;
   bool _isPasswordVisible = true;
   int _currentStep = 0;
 
-  // For profile image
-  File? _profileImage;
-
-  // For DOB
-  DateTime _selectedDate = DateTime.now().subtract(
-    const Duration(days: 365 * 20),
-  ); // Default to 20 years ago
-
-  // For location permission
-  bool _locationPermissionGranted = false;
-
-  Future<void> _pickImage() async {
-    File? pickedImage = await AuthFunctions.pickImage(context);
-    if (pickedImage != null) {
-      setState(() {
-        _profileImage = pickedImage;
-      });
-    }
-  }
-
-  Future<void> _selectDate(BuildContext context) async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedDate,
-      firstDate: DateTime(1900),
-      lastDate: DateTime.now(),
-      builder: (context, child) {
-        return Theme(
-          data: ThemeData.dark().copyWith(
-            colorScheme: const ColorScheme.dark(
-              primary: Color(0xFF2196F3),
-              onPrimary: Colors.white,
-              surface: Color(0xFF1E3A5F),
-              onSurface: Colors.white,
-            ),
-            dialogTheme: DialogThemeData(backgroundColor: Color(0xFF142E4F)),
-          ),
-          child: child!,
-        );
-      },
-    );
-
-    if (picked != null && picked != _selectedDate) {
-      setState(() {
-        _selectedDate = picked;
-      });
-    }
-  }
-
-  Future<void> _requestLocationPermission() async {
-    bool granted = await AuthFunctions.requestLocationPermission(context);
-    if (granted) {
-      setState(() {
-        _locationPermissionGranted = true;
-      });
-    }
-  }
-
   Future<void> signUpWithPhone() async {
+    setState(() {
+      _isLoading = true;
+    });
     // First check if user already exists
     bool userExists = await AuthFunctions.checkUserExists(
       _emailController.text,
@@ -108,6 +45,9 @@ class _SignUpState extends State<SignUp> {
     );
 
     if (userExists) {
+      setState(() {
+        _isLoading = false;
+      });
       return;
     }
 
@@ -123,7 +63,7 @@ class _SignUpState extends State<SignUp> {
         setState(() {
           verificationId = vid;
           optSent = sent;
-          _currentStep = step;
+          _currentStep = 1; // Move to OTP verification step
         });
       },
     );
@@ -133,6 +73,8 @@ class _SignUpState extends State<SignUp> {
     await AuthFunctions.verifyOtp(
       verificationId!,
       _otpController.text,
+      _emailController.text.trim(),
+      _passwordController.text.trim(),
       context,
       (isLoading) {
         setState(() {
@@ -140,38 +82,39 @@ class _SignUpState extends State<SignUp> {
         });
       },
       (bool success, int step) {
-        setState(() {
-          signUp = success;
-          _currentStep = step;
-        });
+        if (success) {
+          // Navigate based on user type
+          _navigateToProfileSetup();
+        }
       },
     );
   }
 
-  void _finishProfileSetup() async {
-    bool success = await AuthFunctions.finishProfileSetup(
-      context,
-      (isLoading) {
-        setState(() {
-          _isLoading = isLoading;
-        });
-      },
-      _emailController.text,
-      _phoneController.text,
-      _passwordController.text,
-      _usernameController.text,
-      selectedGender,
-      _fullNameController.text,
-      _selectedDate,
-      _locationPermissionGranted,
-      _profileImage,
-    );
-
-    if (success) {
-      // Navigate to home screen
+  // Function to navigate to the appropriate profile setup page
+  void _navigateToProfileSetup() {
+    if (widget.userType == UserType.student) {
+      // Navigate to student profile setup
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => MarketPlace(isSignedUp: true)),
+        MaterialPageRoute(
+          builder:
+              (context) => StudentProfileSetupPage(
+                email: _emailController.text.trim(),
+                phone: _phoneController.text.trim(),
+              ),
+        ),
+      );
+    } else {
+      // Navigate to librarian profile setup
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder:
+              (context) => LibrarianProfileSetupPage(
+                email: _emailController.text.trim(),
+                phone: _phoneController.text.trim(),
+              ),
+        ),
       );
     }
   }
@@ -180,10 +123,9 @@ class _SignUpState extends State<SignUp> {
   Widget build(BuildContext context) {
     return SafeArea(
       child: Scaffold(
-        // Add resizeToAvoidBottomInset to prevent overflow when keyboard appears
         resizeToAvoidBottomInset: false,
         appBar: AppBar(
-          title: Text(_getAppBarTitle()),
+          title: Text(_currentStep == 0 ? 'Sign Up' : 'OTP Verification'),
           centerTitle: true,
           elevation: 0,
         ),
@@ -196,7 +138,9 @@ class _SignUpState extends State<SignUp> {
                       CircularProgressIndicator(),
                       SizedBox(height: 20),
                       Text(
-                        _getLoadingText(),
+                        _currentStep == 0
+                            ? "Sending OTP..."
+                            : "Verifying OTP...",
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
@@ -205,60 +149,14 @@ class _SignUpState extends State<SignUp> {
                     ],
                   ),
                 )
-                : _buildCurrentStep(),
+                : _currentStep == 0
+                ? _buildRegistrationForm()
+                : _buildOtpVerificationForm(),
       ),
     );
   }
 
-  String _getAppBarTitle() {
-    switch (_currentStep) {
-      case 0:
-        return 'Sign Up';
-      case 1:
-        return 'OTP Verification';
-      case 2:
-        return 'Setup Account';
-      case 3:
-        return 'Personal Details';
-      case 4:
-        return 'Location Access';
-      default:
-        return 'Sign Up';
-    }
-  }
-
-  String _getLoadingText() {
-    switch (_currentStep) {
-      case 0:
-        return "Sending OTP...";
-      case 1:
-        return "Verifying OTP...";
-      default:
-        return "Setting up profile...";
-    }
-  }
-
-  Widget _buildCurrentStep() {
-    switch (_currentStep) {
-      case 0:
-        return _buildRegistrationForm();
-      case 1:
-        return _buildOtpVerificationForm();
-      case 2:
-        return _buildUsernameGenderStep();
-      case 3:
-        return _buildPersonalDetailsStep();
-      case 4:
-        return _buildLocationPermissionStep();
-      case 5:
-        return SuccessPage();
-      default:
-        return _buildRegistrationForm();
-    }
-  }
-
   Widget _buildRegistrationForm() {
-    // Use SingleChildScrollView with physics for better keyboard handling
     return SingleChildScrollView(
       physics: ClampingScrollPhysics(),
       padding: EdgeInsets.fromLTRB(
@@ -272,15 +170,15 @@ class _SignUpState extends State<SignUp> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Title
+            // Title with user type
             Text(
-              "Create your account",
+              "Create your ${widget.userType == UserType.student ? 'Student' : 'Librarian'} account",
               style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
             SizedBox(height: 30),
 
-            // Email Field - Using InputField widget
+            // Email Field
             InputField(
               controller: _emailController,
               keyboardType: TextInputType.emailAddress,
@@ -300,7 +198,7 @@ class _SignUpState extends State<SignUp> {
             ),
             SizedBox(height: 20),
 
-            // Phone Field - Using InputField widget
+            // Phone Field
             InputField(
               controller: _phoneController,
               labelText: 'Phone Number',
@@ -323,7 +221,7 @@ class _SignUpState extends State<SignUp> {
             ),
             SizedBox(height: 20),
 
-            // Password Field - Using InputField widget
+            // Password Field
             InputField(
               controller: _passwordController,
               labelText: 'Password',
@@ -372,14 +270,14 @@ class _SignUpState extends State<SignUp> {
             ),
             SizedBox(height: 40),
 
-            // Sign Up Button - Using SolidButton widget
+            // Sign Up Button
             SolidButton(
               text: "SEND OTP",
               width: double.infinity,
               height: 50,
               onPressed: () {
                 if (_formKey.currentState!.validate()) {
-                  signUpWithPhone(); // This will start the OTP verification process
+                  signUpWithPhone(); // Start the OTP verification process
                 }
               },
             ),
@@ -395,13 +293,12 @@ class _SignUpState extends State<SignUp> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(builder: (context) => Login()),
-                    ); // Navigate to login page
+                    );
                   },
                   child: Text("Login"),
                 ),
               ],
             ),
-            // Add extra padding to ensure content is visible above keyboard
             SizedBox(height: 20),
           ],
         ),
@@ -523,478 +420,9 @@ class _SignUpState extends State<SignUp> {
               ],
             ),
           ),
-          // Add extra space at bottom to avoid keyboard overlap
           SizedBox(height: 20),
         ],
       ),
-    );
-  }
-
-  Widget _buildUsernameGenderStep() {
-    double h = MediaQuery.of(context).size.height;
-    double w = MediaQuery.of(context).size.width;
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return SingleChildScrollView(
-          physics: ClampingScrollPhysics(),
-          padding: EdgeInsets.fromLTRB(
-            0,
-            0,
-            0,
-            MediaQuery.of(context).viewInsets.bottom,
-          ),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight),
-            child: IntrinsicHeight(
-              child: Column(
-                children: [
-                  // Progress bar
-                  Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: w * 0.05,
-                      vertical: h * 0.04,
-                    ),
-                    child: CustomProgressBar(currentStep: 1, totalSteps: 3),
-                  ),
-
-                  // Content area
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 15),
-                    child: SizedBox(
-                      width: w / 1.1,
-                      child: Card(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Padding(
-                          padding: EdgeInsets.all(15),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            mainAxisAlignment: MainAxisAlignment.start,
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              SizedBox(height: 14),
-                              GestureDetector(
-                                onTap: _pickImage,
-                                child: Stack(
-                                  alignment: Alignment.bottomRight,
-                                  children: [
-                                    CircleAvatar(
-                                      backgroundColor: DarkColor.highlightColor,
-                                      radius: 60, // Reduced size for better fit
-                                      backgroundImage:
-                                          _profileImage != null
-                                              ? FileImage(_profileImage!)
-                                              : null,
-                                      child:
-                                          _profileImage == null
-                                              ? Icon(
-                                                Icons.person,
-                                                size: 70,
-                                                color: Colors.white,
-                                              )
-                                              : null,
-                                    ),
-                                    Container(
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: Colors.black,
-                                      ),
-                                      padding: EdgeInsets.all(6),
-                                      child: Icon(
-                                        Icons.edit,
-                                        size: 25,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              SizedBox(height: 20),
-
-                              // Using InputField widget
-                              InputField(
-                                controller: _usernameController,
-                                labelText: 'Username',
-                                hintText: 'Enter Username',
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: BorderSide(
-                                  color: Colors.blue[200]!,
-                                ),
-                              ),
-                              SizedBox(height: 20),
-                              const Align(
-                                alignment: Alignment.centerLeft,
-                                child: Text("Select Gender"),
-                              ),
-                              SizedBox(height: 10),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Expanded(
-                                    child: ElevatedButton.icon(
-                                      onPressed: () {
-                                        setState(() {
-                                          selectedGender = "Female";
-                                        });
-                                      },
-                                      icon: Icon(
-                                        Icons.female,
-                                        color: Colors.white,
-                                      ),
-                                      label: Text(
-                                        "Female",
-                                        style: TextStyle(color: Colors.white),
-                                      ),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor:
-                                            selectedGender == "Female"
-                                                ? DarkColor.highlightColor
-                                                : Colors.grey[800],
-                                        padding: EdgeInsets.symmetric(
-                                          horizontal: 15,
-                                          vertical: 15,
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            10,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  SizedBox(width: 20),
-                                  Expanded(
-                                    child: ElevatedButton.icon(
-                                      onPressed: () {
-                                        setState(() {
-                                          selectedGender = "Male";
-                                        });
-                                      },
-                                      icon: Icon(
-                                        Icons.male,
-                                        color: Colors.white,
-                                      ),
-                                      label: Text(
-                                        "Male",
-                                        style: TextStyle(color: Colors.white),
-                                      ),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor:
-                                            selectedGender == "Male"
-                                                ? DarkColor.highlightColor
-                                                : Colors.grey[800],
-                                        padding: EdgeInsets.symmetric(
-                                          horizontal: 15,
-                                          vertical: 15,
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            10,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  Spacer(),
-
-                  // Next button - Using NextButton widget
-                  Padding(
-                    padding: EdgeInsets.only(
-                      left: 20,
-                      right: 20,
-                      bottom: 20 + MediaQuery.of(context).viewInsets.bottom / 2,
-                    ),
-                    child: NextButton(
-                      isEnabled: _usernameController.text.trim().isNotEmpty,
-                      onPressed: () {
-                        // Dismiss keyboard
-                        FocusScope.of(context).unfocus();
-                        setState(() {
-                          _currentStep = 3; // Move to personal details step
-                        });
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildPersonalDetailsStep() {
-    double h = MediaQuery.of(context).size.height;
-    double w = MediaQuery.of(context).size.width;
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return SingleChildScrollView(
-          physics: ClampingScrollPhysics(),
-          padding: EdgeInsets.fromLTRB(
-            0,
-            0,
-            0,
-            MediaQuery.of(context).viewInsets.bottom,
-          ),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight),
-            child: IntrinsicHeight(
-              child: Column(
-                children: [
-                  // Progress bar
-                  Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: w * 0.05,
-                      vertical: h * 0.04,
-                    ),
-                    child: CustomProgressBar(currentStep: 2, totalSteps: 3),
-                  ),
-
-                  // Content
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 15),
-                    child: SizedBox(
-                      width: w / 1.1,
-                      child: Card(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Padding(
-                          padding: EdgeInsets.all(20),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            mainAxisAlignment: MainAxisAlignment.start,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                "Tell us more about yourself",
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              SizedBox(height: 30),
-
-                              // Full Name - Using InputField widget
-                              InputField(
-                                controller: _fullNameController,
-                                labelText: 'Full Name',
-                                hintText: 'Enter your full name',
-                                borderRadius: BorderRadius.circular(8),
-
-                              ),
-
-                              SizedBox(height: 30),
-
-                              // Date of Birth with date picker
-                              GestureDetector(
-                                onTap: () {
-                                  // Dismiss keyboard before showing date picker
-                                  FocusScope.of(context).unfocus();
-                                  _selectDate(context);
-                                },
-                                child: Container(
-                                  width: w / 1.2,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: DarkColor.borderColor,
-                                    ),
-                                  ),
-                                  padding: EdgeInsets.all(16),
-                                  child: Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text(
-                                        'DOB: ${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 16,
-                                        ),
-                                      ),
-                                      Icon(
-                                        Icons.calendar_today,
-                                        color: Colors.white,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  Spacer(),
-
-                  // Next button - Using NextButton widget
-                  Padding(
-                    padding: EdgeInsets.only(
-                      left: 20,
-                      right: 20,
-                      bottom: 20 + MediaQuery.of(context).viewInsets.bottom / 2,
-                    ),
-                    child: NextButton(
-                      isEnabled: _fullNameController.text.trim().isNotEmpty,
-                      onPressed: () {
-                        // Dismiss keyboard
-                        FocusScope.of(context).unfocus();
-                        setState(() {
-                          _currentStep = 4; // Move to location permissions step
-                        });
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildLocationPermissionStep() {
-    double h = MediaQuery.of(context).size.height;
-    double w = MediaQuery.of(context).size.width;
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return SingleChildScrollView(
-          physics: ClampingScrollPhysics(),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight),
-            child: IntrinsicHeight(
-
-              child: Column(
-
-                children: [
-                  // Progress bar
-                  Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: w * 0.05,
-                      vertical: h * 0.04,
-                    ),
-                    child: CustomProgressBar(currentStep: 3, totalSteps: 3),
-                  ),
-                  SizedBox(height: 50),
-
-                  // Location section
-                  Column(
-                    children: [
-                      // Location Icon
-                      Icon(
-                        Icons.location_on,
-                        color: DarkColor.highlightColor,
-                        size: 70, // Reduced size for better fit
-                      ),
-                      const SizedBox(height: 20),
-
-                      // Title
-                      const Text(
-                        "Your Location?",
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-
-                      const SizedBox(height: 15),
-
-                      // Subtitle
-                      const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 40),
-                        child: Text(
-                          "We need access to your location to provide you with nearby services and recommendations.",
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.white70, fontSize: 16),
-                        ),
-                      ),
-
-                      const SizedBox(height: 30),
-
-                      // Primary Button - Using SolidButton
-                      // Primary Button
-                      SizedBox(
-                        width: w * 0.8,
-                        height: 50,
-                        child: ElevatedButton(
-                          onPressed:
-                              _locationPermissionGranted
-                                  ? null
-                                  : _requestLocationPermission,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor:
-                                _locationPermissionGranted
-                                    ? Colors.green
-                                    : DarkColor.highlightColor,
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 30,
-                              vertical: 15,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                          child: Text(
-                            _locationPermissionGranted
-                                ? "Permission Granted"
-                                : "Allow Location Access",
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 20),
-
-                      // Manual address entry option
-                      TextButton(
-                        onPressed: () {},
-                        child: Text("Enter Address Manually",style: TextStyle(color: DarkColor.highlightColor),),
-                      ),
-                    ],
-                  ),
-
-                  Spacer(),
-
-                  // Complete button - Using SolidButton
-                  Padding(
-                    padding: EdgeInsets.all(20),
-                    child: SolidButton(
-                      text: "Complete Profile",
-                      width: double.infinity,
-                      height: 50,
-                      onPressed: _finishProfileSetup,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
     );
   }
 
@@ -1004,9 +432,6 @@ class _SignUpState extends State<SignUp> {
     _passwordController.dispose();
     _phoneController.dispose();
     _otpController.dispose();
-    _usernameController.dispose();
-    _fullNameController.dispose();
-    _addressController.dispose();
     super.dispose();
   }
 }

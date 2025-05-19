@@ -16,43 +16,74 @@ class AuthFunctions {
     String phone,
     BuildContext context,
   ) async {
-    DatabaseReference databaseRef = FirebaseDatabase.instance.ref();
-    final snapshot =
-        await databaseRef
-            .child(SmartLib.constPath)
+    final DatabaseReference databaseRef = FirebaseDatabase.instance.ref();
+    final String basePath = SmartLib.constPath;
+    final String normalizedEmail = email.trim();
+    final String normalizedPhone = phone.trim();
+
+    // Define user types to check
+    final List<String> userTypes = ['librarian', 'student'];
+
+    // Create all queries to run in parallel
+    List<Future<DataSnapshot>> queries = [];
+
+    // Add email queries
+    for (String userType in userTypes) {
+      queries.add(
+        databaseRef
+            .child('$basePath/$userType')
             .orderByChild(SmartLib.constEmail)
-            .equalTo(email.trim())
-            .once();
-
-    if (snapshot.snapshot.exists) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Email already in use. Please try a different email.'),
-        ),
+            .equalTo(normalizedEmail)
+            .once()
+            .then((result) => result.snapshot),
       );
-      return true;
     }
 
-    // Also check if the phone number already exists
-    final phoneSnapshot =
-        await databaseRef
-            .child(SmartLib.constPath)
+    // Add phone queries
+    for (String userType in userTypes) {
+      queries.add(
+        databaseRef
+            .child('$basePath/$userType')
             .orderByChild(SmartLib.constPhone)
-            .equalTo(phone.trim())
-            .once();
-
-    if (phoneSnapshot.snapshot.exists) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Phone number already in use. Please try a different number.',
-          ),
-        ),
+            .equalTo(normalizedPhone)
+            .once()
+            .then((result) => result.snapshot),
       );
-      return true;
     }
 
-    return false; // User doesn't exist
+    // Execute all queries in parallel
+    final List<DataSnapshot> results = await Future.wait(queries);
+
+    // Check for email existence (first half of results)
+    for (int i = 0; i < userTypes.length; i++) {
+      if (results[i].exists) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Email already in use by a ${userTypes[i]}. Please use a different email.',
+            ),
+          ),
+        );
+        return true;
+      }
+    }
+
+    // Check for phone existence (second half of results)
+    for (int i = 0; i < userTypes.length; i++) {
+      final int resultIndex = i + userTypes.length;
+      if (results[resultIndex].exists) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Phone number already in use by a ${userTypes[i]}. Please use a different number.',
+            ),
+          ),
+        );
+        return true;
+      }
+    }
+
+    return false; // User doesn't exist in either path
   }
 
   // Function to sign up with phone number
@@ -108,6 +139,8 @@ class AuthFunctions {
   static Future<bool> verifyOtp(
     String verificationId,
     String otp,
+    String email,
+    String password,
     BuildContext context,
     Function(bool) setLoading,
     Function(bool, int) onSuccess,
@@ -131,9 +164,14 @@ class AuthFunctions {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('OTP verification successful')));
+      await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
 
       setLoading(false);
       onSuccess(true, 2); // Move to profile setup step
+
       return true;
     } on FirebaseAuthException catch (e) {
       setLoading(false);
@@ -144,13 +182,94 @@ class AuthFunctions {
     }
   }
 
-  // Function to save user profile
-  static Future<bool> finishProfileSetup(
+  // Function to save user profile and return librarian ID
+  static Future<String> finishLibrarianProfile(
     BuildContext context,
     Function(bool) setLoading,
     String email,
     String phone,
-    String password,
+    String fullName,
+    String gender,
+    File? profileImage,
+  ) async {
+    setLoading(true);
+    String userId =
+        ""; // Initialize userId here to ensure scope across all code paths
+
+    try {
+      // Check for authenticated user
+      final User? currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) {
+        throw Exception("No authenticated user found");
+      }
+
+      // Generate unique librarian ID with "L" prefix
+      userId = "L${DateTime.now().millisecondsSinceEpoch}";
+      String authId = currentUser.uid;
+      String? profileImageUrl;
+
+      // Upload profile image if selected
+      if (profileImage != null) {
+        final storageRef = FirebaseStorage.instance
+            .ref()
+            .child('profile_images')
+            .child('${userId}_${DateTime.now().millisecondsSinceEpoch}.jpg');
+
+        await storageRef.putFile(profileImage);
+        profileImageUrl = await storageRef.getDownloadURL();
+      }
+
+      // Save all user data to Firebase Database
+      DatabaseReference userRef = FirebaseDatabase.instance.ref().child(
+        '${SmartLib.constPath}/librarian/$userId',
+      );
+
+      // Save all user data in a single map
+      Map<String, dynamic> userData = {
+        'authId': authId,
+        'email': email.trim(),
+        'phone': phone.trim(),
+        'fullName': fullName.trim(),
+        'gender': gender,
+        'profileCompleted': true,
+      };
+
+      if (profileImageUrl != null) {
+        userData['profileImageUrl'] = profileImageUrl;
+      }
+
+      // Save the complete user data to Firebase
+      await userRef.set(userData);
+
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Profile setup successful!')),
+      );
+
+      setLoading(false);
+
+      return userId; // Return the librarian ID
+    } catch (e) {
+      setLoading(false);
+
+      // Log error for debugging
+      print('Error in finishLibrarianProfile: $e');
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error saving profile: $e')));
+
+      return userId; // Return whatever userId we have, even if empty
+    }
+  }
+
+  // Function to save user profile
+  static Future<bool> finishStudentProfile(
+    BuildContext context,
+    Function(bool) setLoading,
+    String email,
+    String phone,
+      String department,
     String username,
     String gender,
     String fullName,
@@ -192,16 +311,14 @@ class AuthFunctions {
         'authId': authId,
         'email': email.trim(),
         'phone': phone.trim(),
-        'password': password.trim(),
         'username': username.trim(),
         'gender': gender,
         'fullName': fullName.trim(),
+        'department': department.trim(),
         'dateOfBirth':
             '${dateOfBirth.day}/${dateOfBirth.month}/${dateOfBirth.year}',
         'hasLocationPermission': locationPermissionGranted,
         'profileCompleted': true,
-        'profileCreatedAt': DateTime.now().toIso8601String(),
-        'profileUpdatedAt': DateTime.now().toIso8601String(),
       };
 
       // Add manual address if provided
@@ -215,15 +332,6 @@ class AuthFunctions {
 
       // Save the complete user data to Firebase
       await userRef.set(userData);
-
-      // Update display name in Firebase Auth
-      await currentUser.updateDisplayName(
-        fullName.isNotEmpty ? fullName.trim() : username.trim(),
-      );
-
-      if (profileImageUrl != null) {
-        await currentUser.updatePhotoURL(profileImageUrl);
-      }
 
       // Show success message
       ScaffoldMessenger.of(
@@ -280,6 +388,12 @@ class AuthFunctions {
       );
       return false;
     }
+   /* // Get current position
+    Position position = await Geolocator.getCurrentPosition();
+
+    // Update library model with coordinates
+    widget.libraryModel.locationLatitude = position.latitude.toString();
+    widget.libraryModel.locationLongitude = position.longitude.toString();*/
 
     // If permission is granted
     ScaffoldMessenger.of(
@@ -311,6 +425,7 @@ class AuthFunctions {
     }
   }
 }
+
 class AuthService {
   static const String USER_ID_KEY = 'userId';
   static const String USER_ROLE_KEY = 'userRole';

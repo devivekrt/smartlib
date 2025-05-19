@@ -11,11 +11,14 @@ import 'package:smartlib/user-pages/splash_screen.dart';
 import 'package:smartlib/user-pages/success_page.dart';
 
 import 'firebase_options.dart';
+import 'function/users_function.dart';
+import 'owner-pages/library_details_page.dart';
 
 void main() async{
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
   );
+
   runApp(const MyApp());
 }
 

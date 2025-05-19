@@ -196,7 +196,7 @@ class _MarketPlaceState extends State<MarketPlace> {
         bottomNavigationBar:
             widget.isSignedUp
                 ? Padding(
-                  padding: EdgeInsets.fromLTRB(20, 0, 20, 0),
+                  padding: EdgeInsets.fromLTRB(20, 10, 20, 10),
                   child: SolidButton(
                     text: "Book Later",
                     onPressed: () {
