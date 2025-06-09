@@ -4,11 +4,12 @@ import 'package:smartlib/theme/theme.dart';
 class NextButton extends StatelessWidget {
   final bool isEnabled;
   final VoidCallback onPressed;
+  final String text;
 
   const NextButton({
     Key? key,
     required this.isEnabled,
-    required this.onPressed,
+    required this.onPressed, this.text ="Next",
   }) : super(key: key);
 
   @override
@@ -25,7 +26,7 @@ class NextButton extends StatelessWidget {
           ),
         ),
         child: Text(
-          'Next',
+          text,
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.bold,

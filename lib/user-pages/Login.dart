@@ -3,9 +3,13 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:smartlib/logic/string.dart';
+import 'package:smartlib/owner-pages/librarian_home_page.dart';
+import 'package:smartlib/theme/theme.dart';
 import 'package:smartlib/user-pages/home_page.dart';
+import 'package:smartlib/user-pages/library_market_place.dart';
 import 'package:smartlib/user-pages/market_place.dart';
 import 'package:smartlib/user-pages/select_page.dart';
+import 'package:smartlib/user-pages/student_home_page.dart';
 import 'package:smartlib/widgets/solid_button.dart';
 
 import '../function/users_function.dart';
@@ -24,7 +28,7 @@ class _LoginState extends State<Login> {
   final TextEditingController _passwordController = TextEditingController();
 
   DatabaseReference databaseRef = FirebaseDatabase.instance.ref();
-  bool _isPasswordVisible = true;
+  bool _isPasswordVisible = false;
   bool _isLoading = false;
 
   Future<void> _userLogin() async {
@@ -36,32 +40,52 @@ class _LoginState extends State<Login> {
     if (_formKey.currentState!.validate()) {
       try {
         String email = _emailController.text.trim();
+        String password = _passwordController.text.trim();
 
-        // First, check which user type this email belongs to
-        // This avoids attempting Firebase Auth if the email isn't in our database
-        // It's also more efficient than checking after authentication
+        // Start multiple operations in parallel:
+        // 1. Begin Firebase Auth process
+        // 2. Query student database
+        // 3. Query librarian database
+        final firebaseAuthFuture = FirebaseAuth.instance
+            .signInWithEmailAndPassword(email: email, password: password);
 
-        String userRole = "";
-        String userId = "";
-        bool foundInDatabase = false;
-
-        // Query the database once to determine user type before authentication
-        // Check both collections with Promise.all equivalent (Future.wait)
-        final results = await Future.wait([
+        // Database queries already run in parallel with Future.wait
+        final databaseQueriesFuture = Future.wait([
           databaseRef
-              .child("${SmartLib.constPath}/student")
+              .child("${SmartLib.constPath}/students")
               .orderByChild(SmartLib.constEmail)
               .equalTo(email)
               .once(),
           databaseRef
-              .child("${SmartLib.constPath}/librarian")
+              .child("${SmartLib.constPath}/librarians")
               .orderByChild(SmartLib.constEmail)
               .equalTo(email)
-              .once()
+              .once(),
         ]);
 
-        DatabaseEvent studentSnapshot = results[0];
-        DatabaseEvent librarianSnapshot = results[1];
+        // Run Firebase Auth and database queries in parallel
+        // This is a key optimization - we don't wait for DB queries to complete before starting auth
+        final results = await Future.wait([
+          firebaseAuthFuture.then((_) => true).catchError((_) => false),
+          databaseQueriesFuture,
+        ]);
+
+        // Check Firebase Auth result
+        final bool isFirebaseAuthSuccessful = results[0] as bool;
+        if (!isFirebaseAuthSuccessful) {
+          // If Firebase Auth failed, throw to be caught by exception handler
+          throw FirebaseAuthException(code: 'auth-failed');
+        }
+
+        // Process database query results - these have already completed in parallel
+        final dbResults = results[1] as List<dynamic>;
+        final DatabaseEvent studentSnapshot = dbResults[0];
+        final DatabaseEvent librarianSnapshot = dbResults[1];
+
+        // Initialize variables to track role information
+        String userRole = "";
+        String userId = "";
+        bool foundInDatabase = false;
 
         // Check if user exists in student collection
         if (studentSnapshot.snapshot.exists) {
@@ -74,7 +98,8 @@ class _LoginState extends State<Login> {
         }
         // Check if user exists in librarian collection
         else if (librarianSnapshot.snapshot.exists) {
-          Map<dynamic, dynamic>? users = librarianSnapshot.snapshot.value as Map?;
+          Map<dynamic, dynamic>? users =
+              librarianSnapshot.snapshot.value as Map?;
           if (users != null) {
             userId = users.keys.first.toString();
             userRole = 'librarian';
@@ -82,10 +107,11 @@ class _LoginState extends State<Login> {
           }
         }
 
-        // If email not found in our database, don't attempt Firebase Auth
+        // If authenticated with Firebase but not found in our database, sign out
         if (!foundInDatabase) {
+          await FirebaseAuth.instance.signOut();
           ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Email not registered in our system'))
+            SnackBar(content: Text('Email not registered in our system')),
           );
           setState(() {
             _isLoading = false;
@@ -93,36 +119,30 @@ class _LoginState extends State<Login> {
           return;
         }
 
-        // Now proceed with Firebase Authentication since we know the email exists
-        await FirebaseAuth.instance.signInWithEmailAndPassword(
-          email: email,
-          password: _passwordController.text.trim(),
-        );
-
-        // Authentication successful, and we already have the user role
+        // Authentication successful and user found in database
         SmartLib.email = email;
         SmartLib.userId = userId;
 
-        // Save session data
-        await AuthService.saveUserSession(userId, userRole);
+        // Start saving session data and pre-loading the next screen in parallel
+        final saveSessionFuture = AuthService.saveUserSession(userId, userRole);
+
+        // Prepare the next screen widget in advance
+        final nextScreen =
+            userRole == 'student' ? HomePage() :HomePage();
+
+        // Wait for session data to be saved
+        await saveSessionFuture;
 
         // Navigate based on role
-        if (userRole == 'student') {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => MarketPlace(isSignedUp: false)),
-          );
-        } else {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => HomePage()),
-          );
-        }
-
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Login Successful!'))
+        // Use pushAndRemoveUntil to clear the entire navigation stack
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => nextScreen),
+              (route) => false, // Remove all previous routes
         );
 
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Login Successful!')));
       } on FirebaseAuthException catch (e) {
         String errorMessage = 'Invalid email or password';
 
@@ -130,12 +150,16 @@ class _LoginState extends State<Login> {
           errorMessage = 'Wrong password provided';
         } else if (e.code == 'user-disabled') {
           errorMessage = 'This account has been disabled';
+        } else if (e.code == 'user-not-found') {
+          errorMessage = 'No user found with this email';
+        } else if (e.code == 'auth-failed') {
+          errorMessage =
+              'Authentication failed. Please check your credentials.';
         }
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(errorMessage)),
-        );
-
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(errorMessage)));
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Login error: Please try again')),
@@ -151,154 +175,142 @@ class _LoginState extends State<Login> {
       });
     }
   }
+
   @override
   Widget build(BuildContext context) {
-    double width = MediaQuery
-        .of(context)
-        .size
-        .width;
-    double height = MediaQuery
-        .of(context)
-        .size
-        .height;
+    double width = MediaQuery.of(context).size.width;
+    double height = MediaQuery.of(context).size.height;
 
     return SafeArea(
-      child:_isLoading? Center(
-        child: Card(
-          elevation: 8,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CircularProgressIndicator(),
-                SizedBox(height: 16),
-                Text(
-                  "Logging in...",
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ): Scaffold(
-        appBar: AppBar(
-          title: Text("Login"),
-          centerTitle: true,
-          elevation: 0,
-        ),
-        body:  // Main content - always present but may be obscured by loading overlay
-        Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Title
-                Text(
-                  "Welcome Back",
-                  style: TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                SizedBox(height: 30),
+      child:
 
-                // Email Field
-                InputField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  labelText: 'Email Address',
-                  prefixIcon: Icons.email_outlined,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter email address';
-                    }
-                    if (!RegExp(
-                      r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
-                    ).hasMatch(value)) {
-                      return 'Please enter a valid email address';
-                    }
-                    return null;
-                  },
+              Scaffold(
+                appBar: AppBar(
+                  title: Text("Login"),
+                  centerTitle: true,
+                  elevation: 0,
                 ),
-                SizedBox(height: 20),
-
-                // Password Field
-                InputField(
-                  controller: _passwordController,
-                  labelText: 'Password',
-                  isPassword: !_isPasswordVisible,
-                  // Corrected logic
-                  prefixIcon: Icons.lock_outline,
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _isPasswordVisible
-                          ? Icons.visibility
-                          : Icons.visibility_off,
-                    ),
-                    onPressed: () {
-                      setState(() {
-                        _isPasswordVisible = !_isPasswordVisible;
-                      });
-                    },
-                  ),
-                  maxLines: 1,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter your password';
-                    }
-                    return null;
-                  },
-                ),
-                SizedBox(height: 40),
-
-                // Login Button
-                SolidButton(
-                    text: "Login",
-                    width: double.infinity,
-                    height: 50,
-                    onPressed: (){
-                      if (_formKey.currentState!.validate()) {
-                        _userLogin();
-                      }
-                    }
-                ),
-                SizedBox(height: 20),
-
-                // Sign up option (corrected text)
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text("Don't have an account? "),
-                    TextButton(
-                      onPressed: () {
-                        // Navigate to sign up page
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                SelectPage(), // Replace with your actual sign up page
+                body: // Main content - always present but may be obscured by loading overlay
+                    Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Title
+                        Text(
+                          "Welcome Back",
+                          style: TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
                           ),
-                        );
-                      },
-                      child: Text("Sign Up"),
+                          textAlign: TextAlign.center,
+                        ),
+                        SizedBox(height: 30),
+
+                        // Email Field
+                        InputField(
+                          controller: _emailController,
+                          keyboardType: TextInputType.emailAddress,
+                          labelText: 'Email Address',
+                          prefixIcon: Icons.email_outlined,
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return 'Please enter email address';
+                            }
+                            if (!RegExp(
+                              r"^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$",
+                            ).hasMatch(value)) {
+                              return 'Please enter a valid email address';
+                            }
+                            return null;
+                          },
+                        ),
+                        SizedBox(height: 20),
+
+                        // Password Field
+                        InputField(
+                          controller: _passwordController,
+                          labelText: 'Password',
+                          isPassword: !_isPasswordVisible,
+                          // Corrected logic
+                          prefixIcon: Icons.lock_outline,
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _isPasswordVisible
+                                  ? Icons.visibility
+                                  : Icons.visibility_off,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _isPasswordVisible = !_isPasswordVisible;
+                              });
+                            },
+                          ),
+                          maxLines: 1,
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return 'Please enter your password';
+                            }
+                            return null;
+                          },
+                        ),
+                        SizedBox(height: 40),
+
+                        // Login Button
+                        // Login Button with integrated progress indicator
+                        _isLoading
+                            ? Center(
+                          child: Column(
+                            children: [
+                              CircularProgressIndicator(),
+                              SizedBox(height: 16),
+                              Text(
+                                "Logging in...",
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                            : SolidButton(
+                          text: "Login",
+                          width: double.infinity,
+                          height: 50,
+                          onPressed: _userLogin,
+                        ),
+                        SizedBox(height: 20),
+
+                        // Sign up option (corrected text)
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text("Don't have an account? "),
+                            TextButton(
+                              onPressed: () {
+                                // Navigate to sign up page
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder:
+                                        (context) =>
+                                            SelectPage(), // Replace with your actual sign up page
+                                  ),
+                                );
+                              },
+                              child: Text("Sign Up"),
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: 20),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
-                SizedBox(height: 20),
-              ],
-            ),
-          ),
-        ),
-      ),
+              ),
     );
-  }}
+  }
+}

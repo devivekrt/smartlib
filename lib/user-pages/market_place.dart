@@ -57,28 +57,28 @@ class _MarketPlaceState extends State<MarketPlace> {
       ),
       builder:
           (context) => Container(
-            padding: EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  "Sort By",
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                SizedBox(height: 15),
-                _buildSortOption("Price: Low to High"),
-                _buildSortOption("Price: High to Low"),
-                _buildSortOption("Rating: High to Low"),
-                _buildSortOption("Most Reviews"),
-                _buildSortOption("Most Popular"),
-              ],
+        padding: EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "Sort By",
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
             ),
-          ),
+            SizedBox(height: 15),
+            _buildSortOption("Price: Low to High"),
+            _buildSortOption("Price: High to Low"),
+            _buildSortOption("Rating: High to Low"),
+            _buildSortOption("Most Reviews"),
+            _buildSortOption("Most Popular"),
+          ],
+        ),
+      ),
     );
   }
 
@@ -107,34 +107,34 @@ class _MarketPlaceState extends State<MarketPlace> {
       ),
       builder:
           (context) => Container(
-            padding: EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  "Filter Options",
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                SizedBox(height: 15),
-                _buildFilterOption("Rating (4+)"),
-                _buildFilterOption("Open Now"),
-                _buildFilterOption("24x7 Access"),
-                _buildFilterOption("Distance (< 3km)"),
-                SizedBox(height: 15),
-                SolidButton(
-                  text: "Apply Filters",
-                  width: double.infinity,
-                  height: 45,
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ],
+        padding: EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "Filter Options",
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
             ),
-          ),
+            SizedBox(height: 15),
+            _buildFilterOption("Rating (4+)"),
+            _buildFilterOption("Open Now"),
+            _buildFilterOption("24x7 Access"),
+            _buildFilterOption("Distance (< 3km)"),
+            SizedBox(height: 15),
+            SolidButton(
+              text: "Apply Filters",
+              width: double.infinity,
+              height: 45,
+              onPressed: () => Navigator.pop(context),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -166,7 +166,7 @@ class _MarketPlaceState extends State<MarketPlace> {
       child: Scaffold(
         appBar: AppBar(
           automaticallyImplyLeading: !widget.isSignedUp,
-         /* leading:
+          /* leading:
               widget.isSignedUp
                   ? null // No back button when signed up
                   : IconButton(
@@ -194,21 +194,21 @@ class _MarketPlaceState extends State<MarketPlace> {
         // Book Later button only shown when signed up
         floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
         bottomNavigationBar:
-            widget.isSignedUp
-                ? Padding(
-                  padding: EdgeInsets.fromLTRB(20, 10, 20, 10),
-                  child: SolidButton(
-                    text: "Book Later",
-                    onPressed: () {
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(builder: (context) => HomePage()),
-                      );
-                    },
-                    width: double.infinity,
-                  ),
-                )
-                : null,
+        widget.isSignedUp
+            ? Padding(
+          padding: EdgeInsets.fromLTRB(20, 10, 20, 10),
+          child: SolidButton(
+            text: "Book Later",
+            onPressed: () {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => HomePage()),
+              );
+            },
+            width: double.infinity,
+          ),
+        )
+            : null,
         body: Column(
           children: [
             // Only show custom tab buttons when not signed up
@@ -233,9 +233,9 @@ class _MarketPlaceState extends State<MarketPlace> {
                           });
                         },
                         buttonColor:
-                            _showFindNew ? DarkColor.primary : Colors.transparent,
+                        _showFindNew ? DarkColor.primary : Colors.transparent,
                         borderColor:
-                            _showFindNew ? Colors.transparent : DarkColor.primary,
+                        _showFindNew ? Colors.transparent : DarkColor.primary,
                         width: double.infinity,
                         height: 50,
                       ),
@@ -251,9 +251,9 @@ class _MarketPlaceState extends State<MarketPlace> {
                           });
                         },
                         buttonColor:
-                            !_showFindNew ? DarkColor.primary : Colors.transparent,
+                        !_showFindNew ? DarkColor.primary : Colors.transparent,
                         borderColor:
-                            !_showFindNew ? Colors.transparent : DarkColor.primary,
+                        !_showFindNew ? Colors.transparent : DarkColor.primary,
                         width: double.infinity,
                         height: 50,
                       ),
@@ -265,11 +265,11 @@ class _MarketPlaceState extends State<MarketPlace> {
             // Library list content
             Expanded(
               child:
-                  widget.isSignedUp
-                      ? _buildLibraryList(width)
-                      : (_showFindNew
-                          ? _buildLibraryList(width)
-                          : _buildLastJoinedList(width)),
+              widget.isSignedUp
+                  ? _buildLibraryList(width)
+                  : (_showFindNew
+                  ? _buildLibraryList(width)
+                  : _buildLastJoinedList(width)),
             ),
           ],
         ),

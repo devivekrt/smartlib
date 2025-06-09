@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -161,6 +162,7 @@ class AuthFunctions {
       );
 
       await FirebaseAuth.instance.signInWithCredential(credential);
+      await FirebaseAuth.instance.signOut();
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('OTP verification successful')));
@@ -184,17 +186,19 @@ class AuthFunctions {
 
   // Function to save user profile and return librarian ID
   static Future<String> finishLibrarianProfile(
-    BuildContext context,
-    Function(bool) setLoading,
-    String email,
-    String phone,
-    String fullName,
-    String gender,
-    File? profileImage,
-  ) async {
+      BuildContext context,
+      Function(bool) setLoading,
+      String email,
+      String phone,
+      String fullName,
+      String gender,
+      File? profileImage, {
+        String? panId,
+        String? gstNumber,
+        String? experience,
+      }) async {
     setLoading(true);
-    String userId =
-        ""; // Initialize userId here to ensure scope across all code paths
+    String librarainId = ""; // Initialize userId here to ensure scope across all code paths
 
     try {
       // Check for authenticated user
@@ -204,27 +208,29 @@ class AuthFunctions {
       }
 
       // Generate unique librarian ID with "L" prefix
-      userId = "L${DateTime.now().millisecondsSinceEpoch}";
+      librarainId = "L${DateTime.now().millisecondsSinceEpoch}";
       String authId = currentUser.uid;
       String? profileImageUrl;
+
+
 
       // Upload profile image if selected
       if (profileImage != null) {
         final storageRef = FirebaseStorage.instance
             .ref()
             .child('profile_images')
-            .child('${userId}_${DateTime.now().millisecondsSinceEpoch}.jpg');
+            .child('${librarainId}_${DateTime.now().millisecondsSinceEpoch}.jpg');
 
         await storageRef.putFile(profileImage);
         profileImageUrl = await storageRef.getDownloadURL();
       }
 
-      // Save all user data to Firebase Database
+      // Save to Realtime Database - matching the required structure
       DatabaseReference userRef = FirebaseDatabase.instance.ref().child(
-        '${SmartLib.constPath}/librarian/$userId',
+        '${SmartLib.constPath}/librarians/$librarainId',
       );
 
-      // Save all user data in a single map
+      // Build user data map with required fields
       Map<String, dynamic> userData = {
         'authId': authId,
         'email': email.trim(),
@@ -232,14 +238,31 @@ class AuthFunctions {
         'fullName': fullName.trim(),
         'gender': gender,
         'profileCompleted': true,
+        //'managedLibraries': [],  // Initially empty array
       };
 
+      // Add optional fields if provided
       if (profileImageUrl != null) {
-        userData['profileImageUrl'] = profileImageUrl;
+        userData['profileImage'] = profileImageUrl;
+      }
+
+      if (panId != null) {
+        userData['panId'] = panId;
+      }
+
+      if (gstNumber != null && gstNumber.isNotEmpty) {
+        userData['gstNumber'] = gstNumber;
+      }
+
+
+      if (experience != null && experience.isNotEmpty) {
+        userData['experience'] = experience;
       }
 
       // Save the complete user data to Firebase
       await userRef.set(userData);
+      SmartLib.userId= librarainId;
+      SmartLib.userType= "librarain";
 
       // Show success message
       ScaffoldMessenger.of(context).showSnackBar(
@@ -248,7 +271,7 @@ class AuthFunctions {
 
       setLoading(false);
 
-      return userId; // Return the librarian ID
+      return librarainId; // Return the librarian ID
     } catch (e) {
       setLoading(false);
 
@@ -259,25 +282,27 @@ class AuthFunctions {
         context,
       ).showSnackBar(SnackBar(content: Text('Error saving profile: $e')));
 
-      return userId; // Return whatever userId we have, even if empty
+      return ""; // Return empty string on error
     }
   }
 
-  // Function to save user profile
+  // Updated function to save user profile
   static Future<bool> finishStudentProfile(
-    BuildContext context,
-    Function(bool) setLoading,
-    String email,
-    String phone,
+      BuildContext context,
+      Function(bool) setLoading,
+      String email,
+      String phone,
       String department,
-    String username,
-    String gender,
-    String fullName,
-    DateTime dateOfBirth,
-    bool locationPermissionGranted,
-    File? profileImage, {
-    String? manualAddress, // Add this optional parameter
-  }) async {
+      String username,
+      String fullName,
+      String gender,
+      DateTime dateOfBirth,
+      bool locationPermissionGranted,
+      File? profileImage, {
+        String? latitude = '',
+        String? longitude = '',
+        String? manualAddress,
+      }) async {
     setLoading(true);
 
     try {
@@ -287,15 +312,16 @@ class AuthFunctions {
       }
 
       String authId = currentUser.uid;
-      String userId = "S${DateTime.now().millisecondsSinceEpoch}";
+      String studentId = "S${DateTime.now().millisecondsSinceEpoch}";
       String? profileImageUrl;
+
 
       // Upload profile image if selected
       if (profileImage != null) {
         final storageRef = FirebaseStorage.instance
             .ref()
             .child('profile_images')
-            .child('${userId}_${DateTime.now().millisecondsSinceEpoch}.jpg');
+            .child('${studentId}_${DateTime.now().millisecondsSinceEpoch}.jpg');
 
         await storageRef.putFile(profileImage);
         profileImageUrl = await storageRef.getDownloadURL();
@@ -303,7 +329,7 @@ class AuthFunctions {
 
       // Save all user data to Firebase Database
       DatabaseReference userRef = FirebaseDatabase.instance.ref().child(
-        '${SmartLib.constPath}/student/$userId',
+        '${SmartLib.constPath}/students/$studentId',
       );
 
       // Save all user data in a single map
@@ -313,94 +339,127 @@ class AuthFunctions {
         'phone': phone.trim(),
         'username': username.trim(),
         'gender': gender,
+        'longitude': longitude,
+        'latitude': latitude,
         'fullName': fullName.trim(),
         'department': department.trim(),
-        'dateOfBirth':
-            '${dateOfBirth.day}/${dateOfBirth.month}/${dateOfBirth.year}',
+        'dateOfBirth': '${dateOfBirth.day}/${dateOfBirth.month}/${dateOfBirth.year}',
         'hasLocationPermission': locationPermissionGranted,
         'profileCompleted': true,
+        'activeBookings': [],
+        'bookingHistory': [],
       };
 
-      // Add manual address if provided
+
+
+
       if (manualAddress != null && manualAddress.isNotEmpty) {
         userData['manualAddress'] = manualAddress;
       }
+
+
 
       if (profileImageUrl != null) {
         userData['profileImageUrl'] = profileImageUrl;
       }
 
-      // Save the complete user data to Firebase
+
+
+      // Save the complete user data to Firebase Realtime Database
       await userRef.set(userData);
+      SmartLib.userId= studentId;
+      SmartLib.userType= "student";
 
       // Show success message
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Profile setup successful!')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Profile setup successful!'))
+      );
       setLoading(false);
 
       return true;
     } catch (e) {
       setLoading(false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error saving profile: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error saving profile: $e'))
+      );
       return false;
     }
   }
 
-  // Function to request location permission
-  static Future<bool> requestLocationPermission(BuildContext context) async {
-    LocationPermission permission;
+  static Future<List<String>> getCurrentLocation(
+      BuildContext context,
+      Function(bool) setLoading,
+      ) async {
+    setLoading(true);
+    String locationLatitude = "";
+    String locationLongitude = "";
 
-    // Check if location services are enabled
-    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Location services are disabled. Please enable them in settings.',
-          ),
-        ),
-      );
-      return false;
-    }
-
-    // Check for current permission status
-    permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Location permission denied.')));
-        return false;
+    try {
+      // Check if location services are enabled
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        // Consider opening location settings instead of just failing
+        await Geolocator.openLocationSettings();
+        throw 'Location services are disabled';
       }
-    }
 
-    if (permission == LocationPermission.deniedForever) {
+      // Request permission with proper flow
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          throw 'Location permissions are denied';
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        // Consider opening app settings to let user enable permissions
+        await Geolocator.openAppSettings();
+        throw 'Location permissions are permanently denied';
+      }
+
+      // Get current position with improved accuracy
+      Position position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+          timeLimit: const Duration(seconds: 15)
+      );
+
+      // Update library model with coordinates
+      locationLatitude = position.latitude.toString();
+      locationLongitude = position.longitude.toString();
+      setLoading(false);
+
+     /* setState(() {
+        _locationObtained = true;
+        _isLoading = false;
+      });*/
+
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Location permissions are permanently denied. Please enable them in app settings.',
-          ),
+        const SnackBar(
+          content: Text("Location successfully captured!"),
+          duration: Duration(seconds: 2),
         ),
       );
-      return false;
+
+      return [locationLatitude, locationLongitude];
+    } catch (e) {
+      setLoading(false);
+
+      // More informative error message with action
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Error accessing location: ${e.toString()}"),
+          duration: Duration(seconds: 5),
+        ),
+      );
+
+      return [locationLatitude, locationLongitude];
     }
-   /* // Get current position
-    Position position = await Geolocator.getCurrentPosition();
-
-    // Update library model with coordinates
-    widget.libraryModel.locationLatitude = position.latitude.toString();
-    widget.libraryModel.locationLongitude = position.longitude.toString();*/
-
-    // If permission is granted
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('Location permission granted!')));
-    return true;
   }
+
+
+
 
   // Function to pick image
   static Future<File?> pickImage(BuildContext context) async {

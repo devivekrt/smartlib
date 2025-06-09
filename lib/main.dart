@@ -4,6 +4,8 @@ import 'package:smartlib/theme/theme.dart';
 import 'package:smartlib/user-pages/Login.dart';
 import 'package:smartlib/user-pages/home_page.dart';
 import 'package:smartlib/user-pages/lib_detail.dart';
+import 'package:smartlib/user-pages/library_market_place.dart';
+import 'package:smartlib/user-pages/main_tab_screen.dart';
 import 'package:smartlib/user-pages/market_place.dart';
 import 'package:smartlib/user-pages/select_page.dart';
 import 'package:smartlib/user-pages/sign_up.dart';
@@ -12,13 +14,11 @@ import 'package:smartlib/user-pages/success_page.dart';
 
 import 'firebase_options.dart';
 import 'function/users_function.dart';
-import 'owner-pages/library_details_page.dart';
+import 'owner-pages/library_details_upload.dart';
 
-void main() async{
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-  );
-
+  await Firebase.initializeApp();
   runApp(const MyApp());
 }
 
@@ -27,12 +27,12 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return  MaterialApp(
+    return MaterialApp(
       title: "Smart-Lib",
       theme: darkTheme,
       debugShowCheckedModeBanner: false,
 
-      home: SelectPage(),
+      home: MainTabScreen(),
     );
   }
 }
