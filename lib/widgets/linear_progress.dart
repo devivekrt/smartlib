@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gap/gap.dart';
 
 class CustomProgressBar extends StatelessWidget {
   final int currentStep;
@@ -40,7 +41,7 @@ class CustomProgressBar extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(width: 8),
+        const Gap(8),
         Text(
           '$currentStep of $totalSteps',
           style: const TextStyle(color: Colors.white),

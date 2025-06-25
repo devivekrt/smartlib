@@ -69,8 +69,8 @@ class InputField extends StatelessWidget {
                   Colors.black), // Default borderSide to none if not provided
         ),
         prefixIcon:
-            prefixIcon != null ? Icon(prefixIcon) : null, // Prefix Icon logic
-        suffixIcon: suffixIcon, // Suffix Icon logic
+            prefixIcon != null ? Icon(prefixIcon) : null, // Prefix Icon data
+        suffixIcon: suffixIcon, // Suffix Icon data
       ),
       validator: validator,
     );

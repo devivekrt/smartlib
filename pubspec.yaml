@@ -43,6 +43,21 @@ dependencies:
   geolocator: ^10.1.0
   shared_preferences: ^2.5.3
   cloud_firestore: ^5.6.7
+  carousel_slider: ^5.1.1
+  connectivity_plus: ^6.1.4
+  firebase_messaging: ^15.2.7
+  shimmer: ^3.0.0
+
+    # QR Code Generation and Scanning
+  qr_flutter: ^4.1.0          # For generating QR codes
+  mobile_scanner: ^3.4.1      # For scanning QR codes
+    # File Handling & Storage
+  path_provider: ^2.1.1       # Access to device file system
+
+    # Sharing & System Features
+  share_plus: ^7.1.0         # Share files and content
+  intl: ^0.18.1              # Date formatting, required for YYYY-MM-DD HH:MM:SS format
+
 
 
 dev_dependencies:

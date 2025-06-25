@@ -1,7 +1,8 @@
-import 'dart:io';
+// Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): 2025-06-25 10:24:13
+// Current User's Login: devivekrt
 
+import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 class LibraryModel {
   String? id;
@@ -12,11 +13,8 @@ class LibraryModel {
   String? location;
   String? locationLatitude;
   String? locationLongitude;
-
-  // Fields for structure
   Map<String, dynamic>? address;
   Map<String, dynamic>? contactInfo;
-
   int? totalSeats;
   int? availableSeats;
   String? description;
@@ -24,18 +22,10 @@ class LibraryModel {
   File? libraryImage;
   String? libraryImageUrl;
   String? tag;
-
-  // Utilities list
+  String? libraryType;
   List<String> utilities;
-
-  // Enhanced shift model
-  List<ShiftModel> shifts;
+  Map<String, dynamic> shifts;
   int? lowFee;
-
-  // Timestamp fields
-  //String? createdAt;
-
-  // Additional properties for marketplace features
   String status;
   double rating;
   int reviews;
@@ -58,26 +48,76 @@ class LibraryModel {
     this.rules = const [],
     this.libraryImage,
     this.libraryImageUrl,
-    this.shifts = const [],
+    Map<String, dynamic>? shifts,
+    List<ShiftModel>? shiftsList,
     this.lowFee,
-    //this.createdAt,
+    this.libraryType,
     this.tag,
-    this.utilities = const [], // Add utilities with default empty list
-    this.status = 'active', // Default status
-    this.rating = 0.0, // Default rating
-    this.reviews = 0, // Default reviews count
-    this.students = 0, // Default students count
-  });
+    this.utilities = const [],
+    this.status = 'active',
+    this.rating = 0.0,
+    this.reviews = 0,
+    this.students = 0,
+  }) : shifts = shifts ??
+      (shiftsList != null ? _convertShiftsListToMap(shiftsList) : _getDefaultShifts());
+
+  // Helper method to convert a list of ShiftModel to a map
+  static Map<String, dynamic> _convertShiftsListToMap(List<ShiftModel> shiftsList) {
+    final Map<String, dynamic> shiftsMap = {};
+
+    for (int i = 0; i < shiftsList.length; i++) {
+      final shift = shiftsList[i];
+      final String shiftKey;
+
+      if (shift.shiftName != null && shift.shiftName!.isNotEmpty) {
+        shiftKey = shift.shiftName!.toLowerCase().replaceAll(' ', '_');
+      } else {
+        switch (i) {
+          case 0: shiftKey = 'morning'; break;
+          case 1: shiftKey = 'afternoon'; break;
+          case 2: shiftKey = 'evening'; break;
+          case 3: shiftKey = 'night'; break;
+          default: shiftKey = 'shift_${i+1}';
+        }
+      }
+
+      shiftsMap[shiftKey] = {
+        'shiftName': shift.shiftName ?? 'Shift ${i+1}',
+        'shiftStartTime': shift.startTime ?? '00:00',
+        'shiftEndTime': shift.endTime ?? '00:00',
+        'shiftFee': shift.fee ?? 0,
+      };
+    }
+
+    return shiftsMap;
+  }
+
+  // Default shifts if none provided
+  static Map<String, dynamic> _getDefaultShifts() {
+    return {
+      'morning': {
+        'name': 'Morning',
+        'startTime': '07:00',
+        'endTime': '12:00',
+        'fee': 200
+      },
+      'afternoon': {
+        'name': 'Afternoon',
+        'startTime': '12:00',
+        'endTime': '16:00',
+        'fee': 250
+      },
+      'evening': {
+        'name': 'Evening',
+        'startTime': '16:00',
+        'endTime': '20:00',
+        'fee': 150
+      },
+    };
+  }
 
   // Method to convert to Firebase map
   Map<String, dynamic> toMap() {
-    // Convert shifts to maps
-    final List<Map<String, dynamic>> shiftsMapList =
-        shifts.map((shift) => shift.toMap()).toList();
-
-    // Get current timestamp for created/updated fields
-    final timestamp = DateTime.now().toIso8601String();
-
     return {
       'id': id,
       'librarianId': librarianId,
@@ -90,16 +130,15 @@ class LibraryModel {
       'address': address ?? {},
       'contactInfo': contactInfo ?? {},
       'totalSeats': totalSeats,
-      'availableSeats': availableSeats ?? totalSeats, // Default to total seats
+      'availableSeats': availableSeats ?? totalSeats,
       'description': description,
       'rules': rules,
       'libraryImageUrl': libraryImageUrl,
-      'shifts': shiftsMapList,
+      'shifts': shifts,
       'lowFee': lowFee,
       'tag': tag,
+      'libraryType': libraryType,
       'utilities': utilities,
-      // 'createdAt': createdAt ?? timestamp,
-      // Additional properties
       'status': status,
       'rating': rating,
       'reviews': reviews,
@@ -109,12 +148,41 @@ class LibraryModel {
 
   // Factory method to create from Firebase
   factory LibraryModel.fromMap(Map<String, dynamic> map, [String? docId]) {
-    // Convert shifts data
-    final List<ShiftModel> shiftsList = [];
+    // Handle shifts data
+    Map<String, dynamic> shiftsMap = {};
+
+    // Process shifts based on format found in the data
     if (map['shifts'] != null) {
-      for (var item in map['shifts']) {
-        shiftsList.add(ShiftModel.fromMap(item));
+      if (map['shifts'] is Map) {
+        shiftsMap = Map<String, dynamic>.from(map['shifts']);
+      } else if (map['shifts'] is List) {
+        final List<dynamic> shiftsList = map['shifts'];
+        for (int i = 0; i < shiftsList.length; i++) {
+          final shift = shiftsList[i];
+          final String shiftKey;
+
+          if (shift['shiftName'] != null && shift['shiftName'].toString().isNotEmpty) {
+            shiftKey = shift['shiftName'].toString().toLowerCase().replaceAll(' ', '_');
+          } else {
+            switch (i) {
+              case 0: shiftKey = 'morning'; break;
+              case 1: shiftKey = 'afternoon'; break;
+              case 2: shiftKey = 'evening'; break;
+              case 3: shiftKey = 'night'; break;
+              default: shiftKey = 'shift_${i+1}';
+            }
+          }
+
+          shiftsMap[shiftKey] = {
+            'shiftName': shift['shiftName'] ?? 'Shift ${i+1}',
+            'shiftStartTime': shift['shiftStartTime'] ?? '00:00',
+            'shiftEndTime': shift['shiftEndTime'] ?? '00:00',
+            'shiftFee': shift['shiftFee'] ?? 0,
+          };
+        }
       }
+    } else {
+      shiftsMap = _getDefaultShifts();
     }
 
     // Handle rating - could be int, double or missing
@@ -137,25 +205,17 @@ class LibraryModel {
       location: map['location'],
       locationLatitude: map['locationLatitude']?.toString(),
       locationLongitude: map['locationLongitude']?.toString(),
-      address:
-          map['address'] != null
-              ? Map<String, dynamic>.from(map['address'])
-              : null,
-      contactInfo:
-          map['contactInfo'] != null
-              ? Map<String, dynamic>.from(map['contactInfo'])
-              : null,
+      address: map['address'] != null ? Map<String, dynamic>.from(map['address']) : null,
+      contactInfo: map['contactInfo'] != null ? Map<String, dynamic>.from(map['contactInfo']) : null,
       totalSeats: map['totalSeats'],
       availableSeats: map['availableSeats'],
       description: map['description'],
       rules: map['rules'] != null ? List<String>.from(map['rules']) : [],
       libraryImageUrl: map['libraryImageUrl'],
-      shifts: shiftsList,
+      libraryType: map['libraryType'] ?? 'self_study',
+      shifts: shiftsMap,
       lowFee: map['lowFee'],
-      //createdAt: map['createdAt'],
-      utilities:
-          map['utilities'] != null ? List<String>.from(map['utilities']) : [],
-      // Additional properties
+      utilities: map['utilities'] != null ? List<String>.from(map['utilities']) : [],
       status: map['status'] ?? 'active',
       rating: ratingValue,
       reviews: map['reviews'] ?? 0,
@@ -164,7 +224,6 @@ class LibraryModel {
   }
 }
 
-// ShiftModel class (unchanged)
 class ShiftModel {
   String? shiftName;
   String? startTime;
@@ -173,21 +232,12 @@ class ShiftModel {
 
   ShiftModel({this.shiftName, this.startTime, this.endTime, this.fee});
 
-  factory ShiftModel.fromMap(Map<String, dynamic> map) {
-    return ShiftModel(
-      shiftName: map['shiftName'],
-      startTime: map['startTime'],
-      endTime: map['endTime'],
-      fee: map['fee'],
-    );
-  }
-
   Map<String, dynamic> toMap() {
     return {
       'shiftName': shiftName,
-      'startTime': startTime,
-      'endTime': endTime,
-      'fee': fee,
+      'shiftStartTime': startTime,
+      'shiftEndTime': endTime,
+      'shiftFee': fee,
     };
   }
 }
@@ -207,7 +257,6 @@ class LibraryUtility {
 }
 
 class LibraryUtilities {
-  // Predefined list of common utilities
   static final List<LibraryUtility> predefinedUtilities = [
     LibraryUtility(id: 'wifi', name: 'WiFi', icon: Icons.wifi),
     LibraryUtility(id: 'cctv', name: 'CCTV', icon: Icons.videocam),
