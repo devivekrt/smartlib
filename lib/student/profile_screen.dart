@@ -594,21 +594,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           child: Column(
                             children: [
                               _buildProfileOptionItem(
-                                CupertinoIcons.question_circle,
+                                Icons.question_mark_rounded,
                                 "Help & Support",
                                 "Get assistance and FAQs",
                                 textColor,
                               ),
                               Divider(color: textColor.withOpacity(0.1), height: 0),
                               _buildProfileOptionItem(
-                                CupertinoIcons.doc_text,
+                                Icons.article_rounded,
                                 "Terms & Policies",
                                 "Read our terms and privacy policy",
                                 textColor,
                               ),
                               Divider(color: textColor.withOpacity(0.1), height: 0),
                               _buildProfileOptionItem(
-                                CupertinoIcons.arrow_right_circle,
+                                Icons.arrow_circle_right_rounded,
                                 "Log Out",
                                 "Sign out from your account",
                                 textColor,

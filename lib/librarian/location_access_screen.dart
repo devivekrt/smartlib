@@ -21,7 +21,6 @@ class LocationAccessScreen extends StatefulWidget {
 class _LocationAccessScreenState extends State<LocationAccessScreen> {
   bool _isLoading = false;
   bool _locationObtained = false;
-  List<String> location = [];
   String _address = "";
 
   // Controllers for manual location entry
@@ -32,7 +31,6 @@ class _LocationAccessScreenState extends State<LocationAccessScreen> {
   GoogleMapController? _mapController;
   Set<Marker> _markers = {};
   LatLng _initialPosition = const LatLng(28.7041, 77.1025); // Default to Delhi, India
-  bool _mapReady = false;
 
   @override
   void initState() {
@@ -72,46 +70,84 @@ class _LocationAccessScreenState extends State<LocationAccessScreen> {
     }
   }
 
+  // Direct implementation to get current position
   Future<void> _getCurrentLocation() async {
     setState(() {
       _isLoading = true;
     });
 
     try {
-      location = await AuthFunctions.getCurrentLocation(context, (isLoading) {
+      // Check if location services are enabled
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Location services are disabled. Please enable location services."))
+        );
         setState(() {
-          _isLoading = isLoading;
+          _isLoading = false;
         });
+        return;
+      }
+
+      // Check for permission
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Location permissions are denied. Please grant permission to use this feature."))
+          );
+          setState(() {
+            _isLoading = false;
+          });
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Location permissions are permanently denied. Please enable them in app settings."),
+              duration: Duration(seconds: 5),
+            )
+        );
+        setState(() {
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // Get the current position with high accuracy
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: Duration(seconds: 15),
+      );
+
+      // Successfully got position
+      double lat = position.latitude;
+      double lng = position.longitude;
+
+      setState(() {
+        _locationObtained = true;
+        widget.libraryModel.locationLatitude = lat.toString();
+        widget.libraryModel.locationLongitude = lng.toString();
+        _initialPosition = LatLng(lat, lng);
       });
 
-      if (location.isNotEmpty && location.length >= 2) {
-        double lat = double.parse(location[0]);
-        double lng = double.parse(location[1]);
-
-        setState(() {
-          _locationObtained = true;
-          widget.libraryModel.locationLatitude = location[0];
-          widget.libraryModel.locationLongitude = location[1];
-          _initialPosition = LatLng(lat, lng);
-        });
-
-        // Update map position
-        if (_mapController != null) {
-          _mapController!.animateCamera(CameraUpdate.newLatLngZoom(_initialPosition, 15));
-          _updateMarker(_initialPosition);
-        }
-
-        // Get address for the coordinates
-        _getAddressFromCoordinates(lat, lng);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Failed to get location coordinates. Please try again or enter manually."))
-        );
+      // Update map position
+      if (_mapController != null) {
+        _mapController!.animateCamera(CameraUpdate.newLatLngZoom(_initialPosition, 15));
+        _updateMarker(_initialPosition);
       }
+
+      // Get address for the coordinates
+      _getAddressFromCoordinates(lat, lng);
+
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("Error getting location: ${e.toString()}"))
       );
+      print("Error getting location: $e");
     } finally {
       setState(() {
         _isLoading = false;
@@ -124,8 +160,22 @@ class _LocationAccessScreenState extends State<LocationAccessScreen> {
       List<Placemark> placemarks = await placemarkFromCoordinates(latitude, longitude);
       if (placemarks.isNotEmpty) {
         Placemark place = placemarks[0];
+        String street = place.street ?? '';
+        String subLocality = place.subLocality ?? '';
+        String locality = place.locality ?? '';
+        String postalCode = place.postalCode ?? '';
+        String country = place.country ?? '';
+
+        // Create a properly formatted address
+        List<String> addressParts = [];
+        if (street.isNotEmpty) addressParts.add(street);
+        if (subLocality.isNotEmpty) addressParts.add(subLocality);
+        if (locality.isNotEmpty) addressParts.add(locality);
+        if (postalCode.isNotEmpty) addressParts.add(postalCode);
+        if (country.isNotEmpty) addressParts.add(country);
+
         setState(() {
-          _address = "${place.street}, ${place.subLocality}, ${place.locality}, ${place.postalCode}, ${place.country}";
+          _address = addressParts.join(", ");
         });
       }
     } catch (e) {
@@ -293,7 +343,19 @@ class _LocationAccessScreenState extends State<LocationAccessScreen> {
       ),
       body: SafeArea(
         child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
+            ? const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text(
+                "Getting location...",
+                style: TextStyle(color: Colors.white),
+              )
+            ],
+          ),
+        )
             : Column(
           children: [
             // Map View
@@ -321,7 +383,6 @@ class _LocationAccessScreenState extends State<LocationAccessScreen> {
                       onMapCreated: (controller) {
                         setState(() {
                           _mapController = controller;
-                          _mapReady = true;
 
                           // Apply dark theme styling to the map
                           _mapController!.setMapStyle('''[
@@ -345,6 +406,7 @@ class _LocationAccessScreenState extends State<LocationAccessScreen> {
                           ]''');
                         });
 
+                        // Add marker if location is already selected
                         if (_locationObtained) {
                           _updateMarker(_initialPosition);
                         }
@@ -362,13 +424,14 @@ class _LocationAccessScreenState extends State<LocationAccessScreen> {
                         children: [
                           Container(
                             decoration: BoxDecoration(
-                              color: DarkColor.cardColor.withOpacity(0.8),
+                              color: DarkColor.highlightColor,
                               shape: BoxShape.circle,
                             ),
                             margin: const EdgeInsets.only(bottom: 8),
                             child: IconButton(
                               icon: const Icon(Icons.my_location, color: Colors.white),
                               onPressed: _getCurrentLocation,
+                              tooltip: "Get Current Location",
                             ),
                           ),
                           Container(

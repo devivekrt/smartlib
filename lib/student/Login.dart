@@ -240,121 +240,286 @@ class _LoginState extends State<Login> {
     );
   }
 
-  // Normal login screen
+  // Updated Login Screen
   Widget _buildLoginScreen() {
     return SafeArea(
       child: Scaffold(
         appBar: AppBar(
-            title: Text("Login"),
-            centerTitle: true,
-            elevation: 0
+          title: const Text("Login"),
+          centerTitle: true,
+          elevation: 0,
         ),
-        body: Column(
-          children: [
+        body: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: 10),
+                  // Title
+                  const Text(
+                    "Welcome Back",
+                    style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
 
-            // Main login form
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(20.0),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // Title
-                      Text(
-                        "Welcome Back",
-                        style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
-                        textAlign: TextAlign.center,
+                  // Subtitle
+                  Text(
+                    "Sign in to continue",
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.white.withOpacity(0.6),
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 30),
+
+                  // Email Field
+                  InputField(
+                    controller: _emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    labelText: 'Email Address',
+                    prefixIcon: Icons.email_outlined,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter email address';
+                      }
+                      if (!RegExp(
+                        r"^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$",
+                      ).hasMatch(value)) {
+                        return 'Please enter a valid email address';
+                      }
+                      return null;
+                    },
+                  ),
+                  const Gap(20),
+
+                  // Password Field
+                  InputField(
+                    controller: _passwordController,
+                    labelText: 'Password',
+                    isPassword: !_isPasswordVisible,
+                    prefixIcon: Icons.lock_outline,
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _isPasswordVisible
+                            ? Icons.visibility
+                            : Icons.visibility_off,
                       ),
-                      SizedBox(height: 30),
+                      onPressed: () {
+                        setState(() {
+                          _isPasswordVisible = !_isPasswordVisible;
+                        });
+                      },
+                    ),
+                    maxLines: 1,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter your password';
+                      }
+                      return null;
+                    },
+                  ),
 
-                      // Email Field
-                      InputField(
-                        controller: _emailController,
-                        keyboardType: TextInputType.emailAddress,
-                        labelText: 'Email Address',
-                        prefixIcon: Icons.email_outlined,
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Please enter email address';
-                          }
-                          if (!RegExp(
-                            r"^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$",
-                          ).hasMatch(value)) {
-                            return 'Please enter a valid email address';
-                          }
-                          return null;
-                        },
+                  // Forgot Password Link
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () {
+                        _showForgotPasswordDialog();
+                      },
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(50, 30),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
-                      Gap(20),
-
-                      // Password Field
-                      InputField(
-                        controller: _passwordController,
-                        labelText: 'Password',
-                        isPassword: !_isPasswordVisible,
-                        prefixIcon: Icons.lock_outline,
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _isPasswordVisible
-                                ? Icons.visibility
-                                : Icons.visibility_off,
-                          ),
-                          onPressed: () {
-                            setState(() {
-                              _isPasswordVisible = !_isPasswordVisible;
-                            });
-                          },
+                      child: const Text(
+                        "Forgot Password?",
+                        style: TextStyle(
+                          color: DarkColor.highlightColor,
+                          fontWeight: FontWeight.w500,
                         ),
-                        maxLines: 1,
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Please enter your password';
-                          }
-                          return null;
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 30),
+
+                  // Login Button
+                  SolidButton(
+                    text: "Login",
+                    width: double.infinity,
+                    height: 50,
+                    onPressed: _userLogin,
+                  ),
+                  const Gap(20),
+
+                  // Sign up option
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text("Don't have an account? "),
+                      TextButton(
+                        onPressed: () {
+                          // Navigate to sign up page
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => SelectPage(),
+                            ),
+                          );
                         },
-                      ),
-                      SizedBox(height: 40),
-
-                      // Login Button
-                      SolidButton(
-                        text: "Login",
-                        width: double.infinity,
-                        height: 50,
-                        onPressed: _userLogin,
-                      ),
-                      Gap(20),
-
-                      // Sign up option
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text("Don't have an account? "),
-                          TextButton(
-                            onPressed: () {
-                              // Navigate to sign up page
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => SelectPage(),
-                                ),
-                              );
-                            },
-                            child: Text("Sign Up"),
+                        child: const Text(
+                          "Sign Up",
+                          style: TextStyle(
+                            color: DarkColor.highlightColor,
+                            fontWeight: FontWeight.bold,
                           ),
-                        ],
+                        ),
                       ),
-                      Gap(20),
                     ],
                   ),
-                ),
+                  const SizedBox(height: 20),
+
+                ],
               ),
             ),
-
-          ],
+          ),
         ),
       ),
     );
   }
+
+// Add this method to handle the forgot password functionality
+  void _showForgotPasswordDialog() {
+    final TextEditingController emailController = TextEditingController();
+    final GlobalKey<FormState> formKey = GlobalKey<FormState>();
+    bool isLoading = false;
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              backgroundColor: DarkColor.cardColor,
+              title: const Text('Reset Password'),
+              content: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Enter your email address. We\'ll send you a link to reset your password.',
+                      style: TextStyle(fontSize: 14, color: Colors.white70),
+                    ),
+                    const SizedBox(height: 20),
+                    InputField(
+                      controller: emailController,
+                      keyboardType: TextInputType.emailAddress,
+                      labelText: 'Email Address',
+                      prefixIcon: Icons.email_outlined,
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter email address';
+                        }
+                        if (!RegExp(r"^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$").hasMatch(value)) {
+                          return 'Please enter a valid email address';
+                        }
+                        return null;
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                  },
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: isLoading
+                      ? null
+                      : () async {
+                    if (formKey.currentState!.validate()) {
+                      setState(() {
+                        isLoading = true;
+                      });
+
+                      try {
+                        await FirebaseAuth.instance.sendPasswordResetEmail(
+                          email: emailController.text.trim(),
+                        );
+
+                        // Close dialog
+                        Navigator.of(context).pop();
+
+                        // Show success message
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Password reset link has been sent to your email'),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      } on FirebaseAuthException catch (e) {
+                        String errorMessage = 'Failed to send password reset email';
+
+                        switch (e.code) {
+                          case 'user-not-found':
+                            errorMessage = 'No user found with this email address';
+                            break;
+                          case 'invalid-email':
+                            errorMessage = 'Email address is invalid';
+                            break;
+                          case 'too-many-requests':
+                            errorMessage = 'Too many requests. Please try again later';
+                            break;
+                        }
+
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(errorMessage),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      } finally {
+                        if (mounted) {
+                          setState(() {
+                            isLoading = false;
+                          });
+                        }
+                      }
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: DarkColor.highlightColor,
+                  ),
+                  child: isLoading
+                      ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2.0,
+                    ),
+                  )
+                      : const Text('Send Reset Link'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+
+
 }
