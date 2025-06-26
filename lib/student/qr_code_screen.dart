@@ -470,7 +470,7 @@ class _QRScannerScreenState extends State<QRScannerScreen>
               'isCheckedIn': false,
               'checkOutTime': timeString,
               'status': 'checkedOut',
-          'studyDuration': durationMinutes,
+              'studyDuration': durationMinutes,
             });
 
         for (String shiftId in shiftIds) {
@@ -502,7 +502,6 @@ class _QRScannerScreenState extends State<QRScannerScreen>
     }
   }
 
-// Update attendance history in database - creates separate check-in and check-out records
   Future<void> _updateAttendanceHistory({
     required String libraryId,
     required String seatNo,
@@ -513,6 +512,8 @@ class _QRScannerScreenState extends State<QRScannerScreen>
     String? checkInTime,
     String? checkOutTime,
     int? duration,
+    DateTime? shiftStartTime,
+    DateTime? shiftEndTime,
   }) async {
     try {
       // Create base attendance data object with common fields
@@ -522,7 +523,6 @@ class _QRScannerScreenState extends State<QRScannerScreen>
         'libraryId': libraryId,
         'seatNo': seatNo,
         'shiftId': shiftId,
-
       };
 
       // Add shiftIds if available (for multiple shifts)
@@ -532,28 +532,54 @@ class _QRScannerScreenState extends State<QRScannerScreen>
       }
 
       // Handle CHECK-IN activity if provided
-      if (checkInTime != null) {
-        // Create a separate check-in record
-        Map<String, dynamic> checkInData = {
-          ...baseAttendanceData,
-          'type': 'Check-In',
-          'status': 'checked_in',
-          'checkInTime': checkInTime,
-          'timestamp': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        };
+      if (checkInTime != null &&
+          shiftStartTime != null &&
+          shiftEndTime != null) {
+        // Parse check-in time to DateTime for comparison
+        DateTime parsedCheckInTime = DateTime.parse(checkInTime);
 
-        // Store the check-in record
-        await FirebaseFirestore.instance
-            .collection('attendanceHistory')
-            .doc(date)
-            .collection('records')
-            .add(checkInData);
+        // Check if check-in time is within allowed constraints
+        // 1. Check-in allowed up to 30 minutes before shift start
+        // 2. Check-in allowed any time between shift start and shift end
+        // 3. Check-in not allowed after shift end
+        bool isValidCheckIn =
+            parsedCheckInTime.isBefore(shiftEndTime) &&
+            (parsedCheckInTime.isAfter(
+                  shiftStartTime.subtract(Duration(minutes: 30)),
+                ) ||
+                parsedCheckInTime.isAtSameMomentAs(
+                  shiftStartTime.subtract(Duration(minutes: 30)),
+                ));
 
-        print('Check-in record saved for $date');
+        if (isValidCheckIn) {
+          // Create a separate check-in record
+          Map<String, dynamic> checkInData = {
+            ...baseAttendanceData,
+            'type': 'Check-In',
+            'status': 'checked_in',
+            'checkInTime': checkInTime,
+            'timestamp': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          };
+
+          // Store the check-in record
+          await FirebaseFirestore.instance
+              .collection('attendanceHistory')
+              .doc(date)
+              .collection('records')
+              .add(checkInData);
+
+          print('Check-in record saved for $date');
+        } else {
+          print('Check-in denied: Not within allowed time window');
+          // You might want to handle this case, e.g., show an error message to the user
+          throw Exception(
+            'Check-in can only be done 30 minutes before shift start time or within shift hours.',
+          );
+        }
       }
 
-      // Handle CHECK-OUT activity if provided
+      // Handle CHECK-OUT activity if provided (allowed at any time)
       if (checkOutTime != null) {
         // Create a separate check-out record
         Map<String, dynamic> checkOutData = {
@@ -579,18 +605,14 @@ class _QRScannerScreenState extends State<QRScannerScreen>
 
         print('Check-out record saved for $date');
       }
-
     } catch (e) {
       print("Error updating attendance history: $e");
-      // Don't throw error to avoid interrupting check-in/out process
+      // Rethrow to inform caller about the check-in/out constraint violation
+      throw e;
     }
   }
 
-  // Update streak count
-// Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): 2025-06-22 09:45:31
-// Current User's Login: devivekrt
-
-// Update streak count - only once per day
+  // Update streak count - only once per day
   Future<void> _updateStreak(bool isCheckingIn) async {
     try {
       if (!isCheckingIn) {
@@ -603,12 +625,13 @@ class _QRScannerScreenState extends State<QRScannerScreen>
       final todayString = _formatDateToString(today);
 
       // Check if we already updated the streak today
-      final streakRef = FirebaseDatabase.instance
-          .ref()
-          .child("users/students/$_studentId/streakData");
+      final streakRef = FirebaseDatabase.instance.ref().child(
+        "users/students/$_studentId/streakData",
+      );
 
       final streakSnapshot = await streakRef.once();
-      final streakData = streakSnapshot.snapshot.value as Map<dynamic, dynamic>? ?? {};
+      final streakData =
+          streakSnapshot.snapshot.value as Map<dynamic, dynamic>? ?? {};
 
       // Convert to type-safe map
       final Map<String, dynamic> safeStreakData = {};
@@ -652,7 +675,8 @@ class _QRScannerScreenState extends State<QRScannerScreen>
         bool found = false;
         DateTime? lastCheckInDate;
 
-        for (int i = 2; i <= 30; i++) { // Start from 2 days ago (we already checked yesterday)
+        for (int i = 2; i <= 30; i++) {
+          // Start from 2 days ago (we already checked yesterday)
           final date = now.subtract(Duration(days: i));
           final dateStr = dateFormat.format(date);
 
@@ -677,8 +701,10 @@ class _QRScannerScreenState extends State<QRScannerScreen>
         // (customize this rule based on your app's streak policy)
         if (found && lastCheckInDate != null) {
           final daysDifference = today.difference(lastCheckInDate).inDays;
-          if (daysDifference <= 2) { // Just missed yesterday
-            newStreak = currentStreak;  // Keep the streak (or subtract 1 if you prefer)
+          if (daysDifference <= 2) {
+            // Just missed yesterday
+            newStreak =
+                currentStreak; // Keep the streak (or subtract 1 if you prefer)
             print("Missed only yesterday. Maintaining streak: $newStreak");
           } else {
             // Missed more than one day, reset streak
@@ -711,18 +737,17 @@ class _QRScannerScreenState extends State<QRScannerScreen>
       if (newStreak == 7 || newStreak == 30 || newStreak == 100) {
         _createStreakAchievementNotification(newStreak);
       }
-
     } catch (e) {
       print("Error updating streak: $e");
     }
   }
 
-// Helper function to format date to string
+  // Helper function to format date to string
   String _formatDateToString(DateTime date) {
     return "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
   }
 
-// Create streak achievement notification
+  // Create streak achievement notification
   Future<void> _createStreakAchievementNotification(int streak) async {
     try {
       String message;
@@ -730,21 +755,22 @@ class _QRScannerScreenState extends State<QRScannerScreen>
 
       if (streak == 7) {
         title = "7-Day Streak!";
-        message = "Congratulations! You've maintained a 7-day study streak. Keep up the great work!";
+        message =
+            "Congratulations! You've maintained a 7-day study streak. Keep up the great work!";
       } else if (streak == 30) {
         title = "30-Day Streak!";
-        message = "Amazing achievement! You've studied for 30 consecutive days!";
+        message =
+            "Amazing achievement! You've studied for 30 consecutive days!";
       } else if (streak == 100) {
         title = "100-Day Streak!";
-        message = "Incredible dedication! 100 days of continuous studying is a remarkable achievement!";
+        message =
+            "Incredible dedication! 100 days of continuous studying is a remarkable achievement!";
       } else {
         return; // No notification for other streak values
       }
 
       // Create notification in Firestore
-      await FirebaseFirestore.instance
-          .collection('notifications')
-          .add({
+      await FirebaseFirestore.instance.collection('notifications').add({
         'userId': _studentId,
         'type': 'streak_achievement',
         'title': title,
@@ -759,17 +785,17 @@ class _QRScannerScreenState extends State<QRScannerScreen>
           .ref("users/students/$_studentId/notifications")
           .push()
           .set({
-        'type': 'streak_achievement',
-        'title': title,
-        'streakDays': streak,
-        'read': false,
-        'createdAt': ServerValue.timestamp,
-      });
-
+            'type': 'streak_achievement',
+            'title': title,
+            'streakDays': streak,
+            'read': false,
+            'createdAt': ServerValue.timestamp,
+          });
     } catch (e) {
       print("Error creating streak achievement notification: $e");
     }
   }
+
   // Format duration from minutes to readable string
   String _formatDuration(int minutes) {
     if (minutes < 60) {
@@ -780,7 +806,6 @@ class _QRScannerScreenState extends State<QRScannerScreen>
       return '$hours hour${hours > 1 ? 's' : ''} $remainingMinutes minute${remainingMinutes != 1 ? 's' : ''}';
     }
   }
-
 
   @override
   Widget build(BuildContext context) {

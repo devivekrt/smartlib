@@ -25,7 +25,8 @@ class StudentProfileSetupPage extends StatefulWidget {
   });
 
   @override
-  _StudentProfileSetupPageState createState() => _StudentProfileSetupPageState();
+  _StudentProfileSetupPageState createState() =>
+      _StudentProfileSetupPageState();
 }
 
 class _StudentProfileSetupPageState extends State<StudentProfileSetupPage> {
@@ -39,7 +40,9 @@ class _StudentProfileSetupPageState extends State<StudentProfileSetupPage> {
   bool _isLoading = false;
   int _currentStep = 0;
   File? _profileImage;
-  DateTime _selectedDate = DateTime.now().subtract(const Duration(days: 365 * 20));
+  DateTime _selectedDate = DateTime.now().subtract(
+    const Duration(days: 365 * 20),
+  );
   bool _locationPermissionGranted = false;
 
   // Location data
@@ -106,7 +109,8 @@ class _StudentProfileSetupPageState extends State<StudentProfileSetupPage> {
       await Geolocator.openLocationSettings();
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please enable location services.')));
+        const SnackBar(content: Text('Please enable location services.')),
+      );
       return;
     }
 
@@ -116,7 +120,8 @@ class _StudentProfileSetupPageState extends State<StudentProfileSetupPage> {
       if (permission == LocationPermission.denied) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Location permissions are denied.')));
+          const SnackBar(content: Text('Location permissions are denied.')),
+        );
         return;
       }
     }
@@ -124,14 +129,18 @@ class _StudentProfileSetupPageState extends State<StudentProfileSetupPage> {
       await Geolocator.openAppSettings();
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Location permissions are permanently denied.')));
+        const SnackBar(
+          content: Text('Location permissions are permanently denied.'),
+        ),
+      );
       return;
     }
 
     // Get initial position and set as current
     Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-        timeLimit: const Duration(seconds: 15));
+      desiredAccuracy: LocationAccuracy.high,
+      timeLimit: const Duration(seconds: 15),
+    );
     setState(() {
       _latitude = position.latitude.toString();
       _longitude = position.longitude.toString();
@@ -145,8 +154,9 @@ class _StudentProfileSetupPageState extends State<StudentProfileSetupPage> {
       accuracy: LocationAccuracy.high,
       distanceFilter: 10, // meters before update triggers
     );
-    _positionSubscription = Geolocator.getPositionStream(locationSettings: locationSettings)
-        .listen((Position pos) {
+    _positionSubscription = Geolocator.getPositionStream(
+      locationSettings: locationSettings,
+    ).listen((Position pos) {
       setState(() {
         _latitude = pos.latitude.toString();
         _longitude = pos.longitude.toString();
@@ -163,9 +173,14 @@ class _StudentProfileSetupPageState extends State<StudentProfileSetupPage> {
   }
 
   void _finishProfileSetup() {
-    if (_locationPermissionGranted && (_latitude == null || _longitude == null)) {
+    if (_locationPermissionGranted &&
+        (_latitude == null || _longitude == null)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Location permission granted but coordinates not obtained. Please try again.')),
+        SnackBar(
+          content: Text(
+            'Location permission granted but coordinates not obtained. Please try again.',
+          ),
+        ),
       );
       return;
     }
@@ -173,35 +188,37 @@ class _StudentProfileSetupPageState extends State<StudentProfileSetupPage> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => ProgressSuccessPage(
-          title: "Setting Up Profile",
-          loadingMessage: "Creating your account...",
-          completedMessage: "Profile Created Successfully!",
-          taskFunction: () async {
-            await AuthFunctions.finishStudentProfile(
-              context,
+        builder:
+            (context) => ProgressSuccessPage(
+              title: "Setting Up Profile",
+              loadingMessage: "Creating your account...",
+              completedMessage: "Profile Created Successfully!",
+              taskFunction: () async {
+                await AuthFunctions.finishStudentProfile(
+                  context,
                   (isLoading) {},
-              widget.email,
-              widget.phone,
-              _departmentController.text,
-              _usernameController.text,
-              _fullNameController.text,
-              _selectedGender,
-              _selectedDate,
-              _locationPermissionGranted,
-              _profileImage,
-               _latitude ?? '',
-              _longitude ?? '',
-            );
-            return true;
-          },
-          onComplete: () {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => const LibraryMarketplace(isSignedUp: true)),
-            );
-          },
-        ),
+                  widget.email,
+                  widget.phone,
+                  _departmentController.text,
+                  _usernameController.text,
+                  _fullNameController.text,
+                  _selectedGender,
+                  _selectedDate,
+                  _locationPermissionGranted,
+                  _profileImage,
+                );
+                return true;
+              },
+              onComplete: () {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder:
+                        (context) => const LibraryMarketplace(isSignedUp: true),
+                  ),
+                );
+              },
+            ),
       ),
     );
   }
@@ -216,9 +233,9 @@ class _StudentProfileSetupPageState extends State<StudentProfileSetupPage> {
 
   void _nextStep() {
     if (_currentStep == 0 && _usernameController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter a username")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Please enter a username")));
       return;
     }
     if (_currentStep == 1 && _fullNameController.text.isEmpty) {
@@ -250,25 +267,27 @@ class _StudentProfileSetupPageState extends State<StudentProfileSetupPage> {
           appBar: AppBar(
             title: Text(_getAppBarTitle()),
             centerTitle: true,
-            leading: _currentStep > 0
-                ? IconButton(
-              icon: const Icon(Icons.arrow_back),
-              onPressed: _previousStep,
-            )
-                : null,
+            leading:
+                _currentStep > 0
+                    ? IconButton(
+                      icon: const Icon(Icons.arrow_back),
+                      onPressed: _previousStep,
+                    )
+                    : null,
           ),
-          body: _isLoading
-              ? Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: const [
-                CircularProgressIndicator(),
-                Gap(20),
-                Text("Fetching Location..."),
-              ],
-            ),
-          )
-              : _buildCurrentStep(),
+          body:
+              _isLoading
+                  ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: const [
+                        CircularProgressIndicator(),
+                        Gap(20),
+                        Text("Fetching Location..."),
+                      ],
+                    ),
+                  )
+                  : _buildCurrentStep(),
         ),
       ),
     );
@@ -303,14 +322,22 @@ class _StudentProfileSetupPageState extends State<StudentProfileSetupPage> {
       builder: (context, constraints) {
         return SingleChildScrollView(
           physics: ClampingScrollPhysics(),
-          padding: EdgeInsets.fromLTRB(0, 0, 0, MediaQuery.of(context).viewInsets.bottom),
+          padding: EdgeInsets.fromLTRB(
+            0,
+            0,
+            0,
+            MediaQuery.of(context).viewInsets.bottom,
+          ),
           child: ConstrainedBox(
             constraints: BoxConstraints(minHeight: constraints.maxHeight),
             child: IntrinsicHeight(
               child: Column(
                 children: [
                   Padding(
-                    padding: EdgeInsets.symmetric(horizontal: w * 0.05, vertical: h * 0.04),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: w * 0.05,
+                      vertical: h * 0.04,
+                    ),
                     child: CustomProgressBar(currentStep: 1, totalSteps: 4),
                   ),
                   Padding(
@@ -337,12 +364,18 @@ class _StudentProfileSetupPageState extends State<StudentProfileSetupPage> {
                                     CircleAvatar(
                                       backgroundColor: DarkColor.highlightColor,
                                       radius: 60,
-                                      backgroundImage: _profileImage != null
-                                          ? FileImage(_profileImage!)
-                                          : null,
-                                      child: _profileImage == null
-                                          ? Icon(Icons.person, size: 70, color: Colors.white)
-                                          : null,
+                                      backgroundImage:
+                                          _profileImage != null
+                                              ? FileImage(_profileImage!)
+                                              : null,
+                                      child:
+                                          _profileImage == null
+                                              ? Icon(
+                                                Icons.person,
+                                                size: 70,
+                                                color: Colors.white,
+                                              )
+                                              : null,
                                     ),
                                     Container(
                                       decoration: BoxDecoration(
@@ -350,7 +383,11 @@ class _StudentProfileSetupPageState extends State<StudentProfileSetupPage> {
                                         color: Colors.black,
                                       ),
                                       padding: EdgeInsets.all(6),
-                                      child: Icon(Icons.edit, size: 25, color: Colors.white),
+                                      child: Icon(
+                                        Icons.edit,
+                                        size: 25,
+                                        color: Colors.white,
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -381,15 +418,27 @@ class _StudentProfileSetupPageState extends State<StudentProfileSetupPage> {
                                           _selectedGender = "Female";
                                         });
                                       },
-                                      icon: Icon(Icons.female, color: Colors.white),
-                                      label: Text("Female", style: TextStyle(color: Colors.white)),
+                                      icon: Icon(
+                                        Icons.female,
+                                        color: Colors.white,
+                                      ),
+                                      label: Text(
+                                        "Female",
+                                        style: TextStyle(color: Colors.white),
+                                      ),
                                       style: ElevatedButton.styleFrom(
-                                        backgroundColor: _selectedGender == "Female"
-                                            ? DarkColor.highlightColor
-                                            : Colors.grey[800],
-                                        padding: EdgeInsets.symmetric(horizontal: 15, vertical: 15),
+                                        backgroundColor:
+                                            _selectedGender == "Female"
+                                                ? DarkColor.highlightColor
+                                                : Colors.grey[800],
+                                        padding: EdgeInsets.symmetric(
+                                          horizontal: 15,
+                                          vertical: 15,
+                                        ),
                                         shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(10),
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -402,15 +451,27 @@ class _StudentProfileSetupPageState extends State<StudentProfileSetupPage> {
                                           _selectedGender = "Male";
                                         });
                                       },
-                                      icon: Icon(Icons.male, color: Colors.white),
-                                      label: Text("Male", style: TextStyle(color: Colors.white)),
+                                      icon: Icon(
+                                        Icons.male,
+                                        color: Colors.white,
+                                      ),
+                                      label: Text(
+                                        "Male",
+                                        style: TextStyle(color: Colors.white),
+                                      ),
                                       style: ElevatedButton.styleFrom(
-                                        backgroundColor: _selectedGender == "Male"
-                                            ? DarkColor.highlightColor
-                                            : Colors.grey[800],
-                                        padding: EdgeInsets.symmetric(horizontal: 15, vertical: 15),
+                                        backgroundColor:
+                                            _selectedGender == "Male"
+                                                ? DarkColor.highlightColor
+                                                : Colors.grey[800],
+                                        padding: EdgeInsets.symmetric(
+                                          horizontal: 15,
+                                          vertical: 15,
+                                        ),
                                         shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(10),
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -427,7 +488,9 @@ class _StudentProfileSetupPageState extends State<StudentProfileSetupPage> {
                   Padding(
                     padding: EdgeInsets.only(left: 20, right: 20, bottom: 20),
                     child: NextButton(
-                      isEnabled: _usernameController.text.trim().isNotEmpty && _selectedGender.isNotEmpty,
+                      isEnabled:
+                          _usernameController.text.trim().isNotEmpty &&
+                          _selectedGender.isNotEmpty,
                       onPressed: _nextStep,
                     ),
                   ),
@@ -447,14 +510,22 @@ class _StudentProfileSetupPageState extends State<StudentProfileSetupPage> {
       builder: (context, constraints) {
         return SingleChildScrollView(
           physics: ClampingScrollPhysics(),
-          padding: EdgeInsets.fromLTRB(0, 0, 0, MediaQuery.of(context).viewInsets.bottom),
+          padding: EdgeInsets.fromLTRB(
+            0,
+            0,
+            0,
+            MediaQuery.of(context).viewInsets.bottom,
+          ),
           child: ConstrainedBox(
             constraints: BoxConstraints(minHeight: constraints.maxHeight),
             child: IntrinsicHeight(
               child: Column(
                 children: [
                   Padding(
-                    padding: EdgeInsets.symmetric(horizontal: w * 0.05, vertical: h * 0.04),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: w * 0.05,
+                      vertical: h * 0.04,
+                    ),
                     child: CustomProgressBar(currentStep: 2, totalSteps: 4),
                   ),
                   Padding(
@@ -503,7 +574,8 @@ class _StudentProfileSetupPageState extends State<StudentProfileSetupPage> {
                                   ),
                                   padding: EdgeInsets.all(16),
                                   child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
                                     children: [
                                       Text(
                                         'DOB: ${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
@@ -512,7 +584,10 @@ class _StudentProfileSetupPageState extends State<StudentProfileSetupPage> {
                                           fontSize: 16,
                                         ),
                                       ),
-                                      Icon(Icons.calendar_today, color: Colors.white),
+                                      Icon(
+                                        Icons.calendar_today,
+                                        color: Colors.white,
+                                      ),
                                     ],
                                   ),
                                 ),
@@ -534,7 +609,9 @@ class _StudentProfileSetupPageState extends State<StudentProfileSetupPage> {
                   Padding(
                     padding: EdgeInsets.only(left: 20, right: 20, bottom: 20),
                     child: NextButton(
-                      isEnabled: _fullNameController.text.trim().isNotEmpty && _departmentController.text.isNotEmpty,
+                      isEnabled:
+                          _fullNameController.text.trim().isNotEmpty &&
+                          _departmentController.text.isNotEmpty,
                       onPressed: _nextStep,
                     ),
                   ),
@@ -560,7 +637,10 @@ class _StudentProfileSetupPageState extends State<StudentProfileSetupPage> {
               child: Column(
                 children: [
                   Padding(
-                    padding: EdgeInsets.symmetric(horizontal: w * 0.05, vertical: h * 0.04),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: w * 0.05,
+                      vertical: h * 0.04,
+                    ),
                     child: CustomProgressBar(currentStep: 3, totalSteps: 4),
                   ),
                   SizedBox(height: 30),
@@ -577,7 +657,10 @@ class _StudentProfileSetupPageState extends State<StudentProfileSetupPage> {
                             padding: const EdgeInsets.all(30),
                             child: Icon(
                               Icons.location_on,
-                              color: _locationPermissionGranted ? Colors.green : DarkColor.highlightColor,
+                              color:
+                                  _locationPermissionGranted
+                                      ? Colors.green
+                                      : DarkColor.highlightColor,
                               size: 100,
                             ),
                           ),
@@ -587,7 +670,10 @@ class _StudentProfileSetupPageState extends State<StudentProfileSetupPage> {
                               decoration: BoxDecoration(
                                 color: DarkColor.cardColor,
                                 shape: BoxShape.circle,
-                                border: Border.all(color: DarkColor.secondary, width: 3),
+                                border: Border.all(
+                                  color: DarkColor.secondary,
+                                  width: 3,
+                                ),
                               ),
                               child: const Icon(
                                 Icons.check_circle,
@@ -599,7 +685,9 @@ class _StudentProfileSetupPageState extends State<StudentProfileSetupPage> {
                       ),
                       const SizedBox(height: 30),
                       Text(
-                        _locationPermissionGranted ? "Location Captured!" : "Your Location?",
+                        _locationPermissionGranted
+                            ? "Location Captured!"
+                            : "Your Location?",
                         style: const TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
@@ -614,16 +702,25 @@ class _StudentProfileSetupPageState extends State<StudentProfileSetupPage> {
                               ? "Your location has been successfully recorded."
                               : "We need access to your location to provide you with nearby libraries and recommendations.",
                           textAlign: TextAlign.center,
-                          style: const TextStyle(color: Colors.white70, fontSize: 16),
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 16,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 40),
                       SolidButton(
-                        text: _locationPermissionGranted ? "Update Location" : "Allow Location Access",
+                        text:
+                            _locationPermissionGranted
+                                ? "Update Location"
+                                : "Allow Location Access",
                         width: w * 0.8,
                         height: 50,
                         onPressed: _startLocationTracking,
-                        buttonColor: _locationPermissionGranted ? Colors.green : DarkColor.highlightColor,
+                        buttonColor:
+                            _locationPermissionGranted
+                                ? Colors.green
+                                : DarkColor.highlightColor,
                       ),
                       // Removed manual address entry option
                     ],

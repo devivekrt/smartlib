@@ -6,9 +6,11 @@ import 'package:intl/intl.dart';
 import 'package:gap/gap.dart';
 
 import '../../data/string.dart';
-import '../../library/library_details_upload.dart'; // Make sure to add this dependency
+import '../../function/student_function.dart';
+import '../../library/library_details_upload.dart';
+import '../../student/welcomescreen.dart'; // Make sure to add this dependency
 
-class LibrarianProfilePage extends StatelessWidget {
+class LibrarianProfilePage extends StatefulWidget {
   final Map<String, dynamic> librarianData;
   final List<LibraryModel> libraryModels;
   final LibraryModel? currentLibraryModel;
@@ -23,6 +25,34 @@ class LibrarianProfilePage extends StatelessWidget {
     required this.onChangeLibrary,
     required this.formatTimeAgo,
   }) : super(key: key);
+
+  @override
+  State<LibrarianProfilePage> createState() => _LibrarianProfilePageState();
+}
+
+class _LibrarianProfilePageState extends State<LibrarianProfilePage> {
+  bool _isLoading = false;
+
+  Future<void> _logout() async {
+    try {
+      setState(() {
+        _isLoading = true;
+      });
+      AuthFunctions().userLogout(context);
+      /// Navigate to login screen and remove all previous routes
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => WelcomeScreen()), // Replace with your login screen
+            (route) => false, // Remove all previous routes
+      );
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to log out: $e')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -44,12 +74,12 @@ class LibrarianProfilePage extends StatelessWidget {
                   Stack(
                     alignment: Alignment.bottomRight,
                     children: [
-                      librarianData['photoURL'] != null &&
-                              librarianData['photoURL'].toString().isNotEmpty
+                      widget.librarianData['photoURL'] != null &&
+                              widget.librarianData['photoURL'].toString().isNotEmpty
                           ? CircleAvatar(
                             radius: 50,
                             backgroundImage: NetworkImage(
-                              librarianData['photoURL'],
+                              widget.librarianData['photoURL'],
                             ),
                             backgroundColor: Colors.grey[300],
                           )
@@ -58,8 +88,8 @@ class LibrarianProfilePage extends StatelessWidget {
                             backgroundColor: const Color(0xff1940CC),
                             child: Text(
                               _getInitials(
-                                librarianData['fullName'] ??
-                                    librarianData['name'] ??
+                                widget.librarianData['fullName'] ??
+                                    widget.librarianData['name'] ??
                                     'L',
                               ),
                               style: const TextStyle(
@@ -105,8 +135,8 @@ class LibrarianProfilePage extends StatelessWidget {
 
                   // Librarian Name
                   Text(
-                    librarianData['fullName'] ??
-                        librarianData['name'] ??
+                    widget.librarianData['fullName'] ??
+                        widget.librarianData['name'] ??
                         'Librarian',
                     style: const TextStyle(
                       fontSize: 20,
@@ -126,7 +156,7 @@ class LibrarianProfilePage extends StatelessWidget {
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
-                      librarianData['role'] ?? 'Librarian',
+                      widget.librarianData['role'] ?? 'Librarian',
                       style: const TextStyle(
                         color: Color(0xff1940CC),
                         fontWeight: FontWeight.bold,
@@ -137,15 +167,15 @@ class LibrarianProfilePage extends StatelessWidget {
 
                   // Librarian Email and phone
                   Text(
-                    librarianData['email'] ?? SmartLib.email ?? '',
+                    widget.librarianData['email'] ?? SmartLib.email ?? '',
                     style: TextStyle(fontSize: 16, color: Colors.grey[700]),
                   ),
 
-                  if (librarianData['phone'] != null)
+                  if (widget.librarianData['phone'] != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 4.0),
                       child: Text(
-                        librarianData['phone'],
+                        widget.librarianData['phone'],
                         style: TextStyle(fontSize: 14, color: Colors.grey[700]),
                       ),
                     ),
@@ -156,7 +186,7 @@ class LibrarianProfilePage extends StatelessWidget {
                   _buildProfileInfoRow(
                     Icons.app_registration,
                     'Member Since',
-                    _formatDate(librarianData['joinDate']),
+                    _formatDate(widget.librarianData['joinDate']),
                   ),
 
                   _buildProfileInfoRow(
@@ -166,11 +196,11 @@ class LibrarianProfilePage extends StatelessWidget {
                     valueColor: Colors.green,
                   ),
 
-                  if (librarianData['lastLogin'] != null)
+                  if (widget.librarianData['lastLogin'] != null)
                     _buildProfileInfoRow(
                       Icons.access_time,
                       'Last Active',
-                      formatTimeAgo(librarianData['lastLogin']),
+                      widget.formatTimeAgo(widget.librarianData['lastLogin']),
                     ),
 
                   const SizedBox(height: 16),
@@ -217,7 +247,7 @@ class LibrarianProfilePage extends StatelessWidget {
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 16),
-                  libraryModels.isEmpty
+                  widget.libraryModels.isEmpty
                       ? const Center(
                         child: Padding(
                           padding: EdgeInsets.all(16.0),
@@ -230,11 +260,11 @@ class LibrarianProfilePage extends StatelessWidget {
                       : ListView.builder(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
-                        itemCount: libraryModels.length,
+                        itemCount: widget.libraryModels.length,
                         itemBuilder: (context, index) {
-                          final library = libraryModels[index];
+                          final library = widget.libraryModels[index];
                           final isCurrentLibrary =
-                              library.id == currentLibraryModel?.id;
+                              library.id == widget.currentLibraryModel?.id;
 
                           // Get the first letter of the library name for the avatar
                           final String libraryName =
@@ -351,11 +381,11 @@ class LibrarianProfilePage extends StatelessWidget {
                                           Icons.swap_horiz,
                                           color: Color(0xff1940CC),
                                         ),
-                                        onPressed: () => onChangeLibrary(index),
+                                        onPressed: () => widget.onChangeLibrary(index),
                                       ),
                               onTap: () {
                                 if (!isCurrentLibrary) {
-                                  onChangeLibrary(index);
+                                  widget.onChangeLibrary(index);
                                 }
                               },
                             ),
@@ -364,6 +394,7 @@ class LibrarianProfilePage extends StatelessWidget {
                       ),
 
                   const SizedBox(height: 16),
+
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
@@ -378,16 +409,41 @@ class LibrarianProfilePage extends StatelessWidget {
                         ),
                       ),
                       onPressed: () {
-                        // Updated navigation to Library Details Upload
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder:
-                                (context) => LibraryDetailsUpload(
-                                  librarianId: SmartLib.userId,
+                        showDialog(
+                          context: context,
+                          builder:
+                              (context) => AlertDialog(
+                            title: Text('Add New Library'),
+                            content: Text('Are you sure you want add new Library?'),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.of(context).pop(),
+                                child: Text('No'),
+                              ),
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green,
+                                  foregroundColor: Colors.white,
                                 ),
+                                onPressed: (){
+                                  // Updated navigation to Library Details Upload
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder:
+                                          (context) => LibraryDetailsUpload(
+                                        librarianId: SmartLib.userId,
+                                      ),
+                                    ),
+                                  );
+
+                                },
+                                child: Text('Yes, Add Library'),
+                              ),
+                            ],
                           ),
                         );
+
                       },
                     ),
                   ),
@@ -468,24 +524,7 @@ class LibrarianProfilePage extends StatelessWidget {
                                   backgroundColor: Colors.red,
                                   foregroundColor: Colors.white,
                                 ),
-                                onPressed: () async {
-                                  Navigator.of(context).pop();
-                                  try {
-                                    await FirebaseAuth.instance.signOut();
-                                    // Navigate to login screen after logout
-                                    Navigator.of(
-                                      context,
-                                    ).pushReplacementNamed('/login');
-                                  } catch (e) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          'Error signing out: ${e.toString()}',
-                                        ),
-                                      ),
-                                    );
-                                  }
-                                },
+                                onPressed: _logout,
                                 child: Text('Log Out'),
                               ),
                             ],

@@ -1,4 +1,4 @@
-// Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): 2025-06-25 10:24:13
+// Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): 2025-06-25 11:14:41
 // Current User's Login: devivekrt
 
 import 'dart:io';
@@ -59,7 +59,12 @@ class LibraryModel {
     this.reviews = 0,
     this.students = 0,
   }) : shifts = shifts ??
-      (shiftsList != null ? _convertShiftsListToMap(shiftsList) : _getDefaultShifts());
+      (shiftsList != null ? _convertShiftsListToMap(shiftsList) : _getDefaultShifts()) {
+    // Calculate and set the lowest fee if not provided
+    if (this.lowFee == null) {
+      this.lowFee = calculateLowestFee();
+    }
+  }
 
   // Helper method to convert a list of ShiftModel to a map
   static Map<String, dynamic> _convertShiftsListToMap(List<ShiftModel> shiftsList) {
@@ -97,27 +102,64 @@ class LibraryModel {
     return {
       'morning': {
         'name': 'Morning',
-        'startTime': '07:00',
+        'startTime': '08:00',
         'endTime': '12:00',
-        'fee': 200
+        'fee': 50
       },
       'afternoon': {
         'name': 'Afternoon',
         'startTime': '12:00',
         'endTime': '16:00',
-        'fee': 250
+        'fee': 50
       },
       'evening': {
         'name': 'Evening',
         'startTime': '16:00',
         'endTime': '20:00',
-        'fee': 150
+        'fee': 75
       },
     };
   }
 
+  // Find the lowest fee among all shifts
+  int calculateLowestFee() {
+    if (shifts.isEmpty) return 0;
+
+    int? lowest;
+
+    shifts.forEach((_, shiftData) {
+      if (shiftData is Map) {
+        int fee;
+
+        // Handle different fee field names that might exist in the data
+        if (shiftData.containsKey('shiftFee')) {
+          fee = shiftData['shiftFee'] is int
+              ? shiftData['shiftFee']
+              : int.tryParse(shiftData['shiftFee'].toString()) ?? 0;
+        } else if (shiftData.containsKey('fee')) {
+          fee = shiftData['fee'] is int
+              ? shiftData['fee']
+              : int.tryParse(shiftData['fee'].toString()) ?? 0;
+        } else {
+          fee = 0;
+        }
+
+        if (lowest == null || fee < lowest!) {
+          lowest = fee;
+        }
+      }
+    });
+
+    return lowest ?? 0;
+  }
+
   // Method to convert to Firebase map
   Map<String, dynamic> toMap() {
+    // Ensure lowFee is calculated before saving
+    if (lowFee == null) {
+      lowFee = calculateLowestFee();
+    }
+
     return {
       'id': id,
       'librarianId': librarianId,

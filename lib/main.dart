@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:smartlib/student/welcomescreen.dart';
 import 'package:smartlib/theme/theme.dart';
 import 'package:smartlib/student/Login.dart';
-import 'package:smartlib/student/home_page.dart';
 import 'package:smartlib/student/lib_detail.dart';
 import 'package:smartlib/student/library_market_place.dart';
 import 'package:smartlib/student/main_tab_screen.dart';
@@ -14,6 +13,7 @@ import 'package:smartlib/student/success_page.dart';
 import 'package:smartlib/student/test.dart';
 
 import 'firebase_options.dart';
+import 'function/network_checker.dart';
 import 'function/notification_service.dart';
 import 'function/student_function.dart';
 import 'library/library_details_upload.dart';
@@ -32,12 +32,11 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: "Smart-Lib",
+      title: "LibTrack",
       theme: darkTheme,
       navigatorKey: NotificationService().navigatorKey,
       debugShowCheckedModeBanner: false,
-
-      home: SplashScreen(),
+      home: SplashScreen( ),
     );
   }
 }

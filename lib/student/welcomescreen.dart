@@ -1,9 +1,10 @@
-// Welcome Screen Implementation
 import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:gap/gap.dart';
 import 'package:smartlib/student/select_page.dart';
+import 'package:smartlib/widgets/solid_button.dart';
 
 class WelcomeScreen extends StatefulWidget {
   @override
@@ -23,6 +24,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   late List<List<int>> repeatedBoxIndexes;
 
   final List<Color> boxColors = [
+    // Original colors
     Colors.pinkAccent.withOpacity(0.9),
     Colors.lightBlue.withOpacity(0.9),
     Colors.deepPurple.withOpacity(0.9),
@@ -31,9 +33,24 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     Colors.amber.withOpacity(0.9),
     Colors.greenAccent.withOpacity(0.9),
     Colors.indigoAccent.withOpacity(0.9),
+
+    // New vibrant colors
+    Color(0xFFFF1744).withOpacity(0.85), // Vibrant Red
+    Color(0xFFFF9100).withOpacity(0.85), // Bright Orange
+    Color(0xFF00E676).withOpacity(0.85), // Neon Green
+    Color(0xFF2979FF).withOpacity(0.85), // Electric Blue
+    Color(0xFFD500F9).withOpacity(0.85), // Vivid Purple
+    Color(0xFFFFEA00).withOpacity(0.85), // Sharp Yellow
+    Color(0xFFFF4081).withOpacity(0.85), // Hot Pink
+    Color(0xFF00B8D4).withOpacity(0.85), // Aqua Blue
+    Color(0xFF64DD17).withOpacity(0.85), // Lush Lime
+    Color(0xFF00C853).withOpacity(0.85), // Rich Green
+    Color(0xFFFF6D00).withOpacity(0.85), // Strong Orange
+    Color(0xFF6200EA).withOpacity(0.85), // Deep Violet
   ];
 
   final List<IconData> baseIcons = [
+    // Original icons
     Icons.school,
     Icons.local_library,
     Icons.book,
@@ -49,6 +66,24 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     Icons.laptop,
     Icons.tablet,
     Icons.science,
+
+    // Additional icons
+    Icons.article,
+    Icons.collections_bookmark,
+    Icons.history_edu,
+    Icons.biotech,
+    Icons.psychology,
+    Icons.devices,
+    Icons.chair,
+    Icons.desktop_windows,
+    Icons.calculate,
+    Icons.architecture,
+    Icons.public,
+    Icons.note_alt,
+    Icons.chair_alt,
+    Icons.hub,
+    Icons.emoji_objects_outlined,
+    Icons.smart_display,
   ];
 
   late List<List<IconData>> columnIcons;
@@ -123,7 +158,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
     return SizedBox(
       width: boxSize,
-      height: 390,
+      height: MediaQuery.of(context).size.height* 0.5,
       child: ClipRect(
         child: ListView.builder(
           controller: controllers[index],
@@ -184,6 +219,19 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     return Scaffold(
       body: Stack(
         children: [
+          // Background gradient (to fill empty space)
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Colors.black, Colors.blueGrey.shade900],
+                stops: [0.6, 1.0],
+              ),
+            ),
+          ),
+
+          // Scrolling columns
           Align(
             alignment: Alignment.topCenter,
             child: Padding(
@@ -200,41 +248,38 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
               ),
             ),
           ),
+          // Bottom section
           Align(
             alignment: Alignment.bottomCenter,
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 30.0),
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 50),
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     'Book your seat\nanywhere to study!',
                     style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
-                      fontSize: 28,
+                      fontSize: 33,
                     ),
                     textAlign: TextAlign.center,
                   ),
-                  SizedBox(height: 15),
+                  Gap(20),
                   Text(
                     "India's 1st Library Seat Booking\nPlatform",
-                    style: TextStyle(color: Colors.white70),
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 16,
+                    ),
                     textAlign: TextAlign.center,
                   ),
-                  SizedBox(height: 40),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blueAccent,
-                      padding:
-                      EdgeInsets.symmetric(horizontal: 140, vertical: 18),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(15),
-                      ),
-                    ),
+                  SizedBox(height: 30),
+                  SolidButton(
+                    text: "Get Started",
                     onPressed: _navigateToSelectPage,
-                    child: Text("Get Started",
-                        style: TextStyle(color: Colors.white, fontSize: 17)),
+                    width: double.infinity,
+                    height: 60,
                   ),
                 ],
               ),

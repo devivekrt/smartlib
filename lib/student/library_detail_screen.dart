@@ -8,7 +8,6 @@ import 'package:smartlib/theme/theme.dart';
 import 'package:smartlib/models/library_model.dart';
 import 'package:smartlib/student/seat_booking_screen.dart';
 import 'package:smartlib/widgets/solid_button.dart';
-import 'package:smartlib/student/home_page.dart';
 
 import '../data/string.dart';
 import 'main_tab_screen.dart';
@@ -255,7 +254,7 @@ class _LibraryDetailScreenState extends State<LibraryDetailScreen> {
           if (widget.isSignedUp) {
             Navigator.pushAndRemoveUntil(
               context,
-              MaterialPageRoute(builder: (context) => HomePage()),
+              MaterialPageRoute(builder: (context) => MainTabScreen()),
                   (route) => false,
             );
           }
@@ -441,7 +440,7 @@ class _LibraryDetailScreenState extends State<LibraryDetailScreen> {
                             Navigator.pushAndRemoveUntil(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => HomePage(),
+                                builder: (context) => SeatBookingScreen(library: library, userId: SmartLib.userId),
                               ),
                                   (route) => false,
                             );
@@ -636,7 +635,7 @@ class _LibraryDetailScreenState extends State<LibraryDetailScreen> {
                                     Navigator.pushAndRemoveUntil(
                                       context,
                                       MaterialPageRoute(
-                                        builder: (context) => HomePage(),
+                                        builder: (context) => MainTabScreen(),
                                       ),
                                           (route) => false,
                                     );

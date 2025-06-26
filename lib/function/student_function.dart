@@ -7,9 +7,11 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:smartlib/student/welcomescreen.dart';
 
 import '../data/string.dart';
 import '../models/student_model.dart';
+import 'notification_service.dart';
 
 class AuthFunctions {
   // Function to check if user exists in database
@@ -301,8 +303,6 @@ class AuthFunctions {
     DateTime dateOfBirth,
     bool locationPermissionGranted,
     File? profileImage,
-    String? latitude,
-    String? longitude,
   ) async {
     setLoading(true);
 
@@ -339,8 +339,6 @@ class AuthFunctions {
         dateOfBirth:
             '${dateOfBirth.day}/${dateOfBirth.month}/${dateOfBirth.year}',
         hasLocationPermission: locationPermissionGranted,
-        latitude: latitude,
-        longitude: longitude,
         profileImageUrl: profileImageUrl,
         profileCompleted: true,
         bookingHistory: [],
@@ -462,6 +460,39 @@ class AuthFunctions {
       return null;
     }
   }
+
+  Future<void> userLogout(BuildContext context) async {
+    try {
+      // Remove FCM token to stop receiving notifications
+
+      // Clear session data
+      await AuthService.clearUserSession();
+
+      // Reset SmartLib userId
+      SmartLib.userId = "";
+
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Logged out successfully'),
+          duration: Duration(seconds: 2),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      // Handle any errors during logout
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error during logout: ${e.toString()}'),
+          duration: Duration(seconds: 3),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      // Reset loading state if still in this component
+    }
+  }
 }
 
 class AuthService {
@@ -491,5 +522,23 @@ class AuthService {
   static Future<bool> isLoggedIn() async {
     final userId = await getUserId();
     return userId != null;
+  }
+
+  // Add this method to your AuthService class
+  static Future<void> clearUserSession() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('userId');
+      await prefs.remove('userRole');
+      await prefs.remove('isLoggedIn');
+
+      // Clear any other session-related data you might be storing
+      // For example:
+      // await prefs.remove('userName');
+      // await prefs.remove('userEmail');
+    } catch (e) {
+      print('Error clearing user session: $e');
+      throw e;
+    }
   }
 }

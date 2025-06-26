@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 
+import '../theme/theme.dart';
+
 class SolidButton extends StatelessWidget {
   const SolidButton({
     super.key,
     required this.text,
     required this.onPressed,
-    this.buttonColor,
+    this.buttonColor = DarkColor.primary,
     this.width = 100,
-    this.height = 50,
+    this.height = 60,
     this.borderColor,
   });
   final String text;
@@ -24,6 +26,7 @@ class SolidButton extends StatelessWidget {
       child: Text(
         text,
         style: TextStyle(
+          fontSize: 17,
           color:  Colors.white,
           fontWeight: FontWeight.bold,
         ),

@@ -7,9 +7,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:gap/gap.dart';
 import 'package:intl/intl.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:smartlib/data/string.dart';
+import 'package:smartlib/function/student_function.dart';
 import 'package:smartlib/student/edit_profile_page.dart';
+import 'package:smartlib/student/welcomescreen.dart';
 
 import 'booking_history_screen.dart';
 
@@ -195,10 +196,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
   // Handle logout action
   Future<void> _logout() async {
     try {
-      await FirebaseAuth.instance.signOut();
-      // Navigate to login screen
-      Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+      setState(() {
+        _isLoading = true;
+      });
+      AuthFunctions().userLogout(context);
+      /// Navigate to login screen and remove all previous routes
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => WelcomeScreen()), // Replace with your login screen
+            (route) => false, // Remove all previous routes
+      );
     } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to log out: $e')),
       );

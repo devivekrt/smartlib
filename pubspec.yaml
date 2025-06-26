@@ -46,6 +46,8 @@ dependencies:
   carousel_slider: ^5.1.1
   connectivity_plus: ^6.1.4
   firebase_messaging: ^15.2.7
+  geocoding: ^2.1.0
+  google_maps_flutter: ^2.3.0
   shimmer: ^3.0.0
 
     # QR Code Generation and Scanning
@@ -53,9 +55,6 @@ dependencies:
   mobile_scanner: ^3.4.1      # For scanning QR codes
     # File Handling & Storage
   path_provider: ^2.1.1       # Access to device file system
-
-    # Sharing & System Features
-  share_plus: ^7.1.0         # Share files and content
   intl: ^0.18.1              # Date formatting, required for YYYY-MM-DD HH:MM:SS format
 
 
@@ -83,7 +82,8 @@ flutter:
   uses-material-design: true
 
   # To add assets to your application, add an assets section, like this:
-  # assets:
+  assets:
+    - assets/
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg
 

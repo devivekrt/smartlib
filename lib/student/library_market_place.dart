@@ -7,7 +7,6 @@ import 'package:gap/gap.dart';
 import 'package:smartlib/theme/theme.dart';
 import 'package:smartlib/models/library_model.dart';
 import 'package:smartlib/widgets/solid_button.dart';
-import 'package:smartlib/student/home_page.dart';
 import 'dart:math' show min, max;
 
 import '../data/string.dart';

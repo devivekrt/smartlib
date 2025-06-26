@@ -10,6 +10,7 @@ import 'package:smartlib/library/library_edit_screen.dart';
 import '../../theme/theme.dart';
 import '../library_checkin_management.dart';
 import '../library_qrcode_gen.dart';
+import '../notification_send.dart';
 
 class LibrarianDashboardPage extends StatelessWidget {
   final Map<String, dynamic> currentLibrary;
@@ -374,10 +375,7 @@ class LibrarianDashboardPage extends StatelessWidget {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (context) => LibraryCheckinManagementPage(
-                                      libraryId: currentLibrary['id'],
-                                      libraryName: currentLibrary['libraryName'],
-                                    ),
+                                    builder: (context) => LibrarianNotificationScreen(librarianId: SmartLib.userId, libraryId: currentLibrary['id'],)
                                   ),
                                 );
                               },

@@ -6,7 +6,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:smartlib/data/string.dart';
 import 'package:smartlib/librarian/librarian_home_page.dart';
 import 'package:smartlib/theme/theme.dart';
-import 'package:smartlib/student/home_page.dart';
 import 'package:smartlib/student/library_market_place.dart';
 import 'package:smartlib/student/select_page.dart';
 import 'package:smartlib/student/student_home_page.dart';
@@ -34,10 +33,6 @@ class _LoginState extends State<Login> {
   bool _isPasswordVisible = false;
   bool _isLoading = false;
 
-  // UTC formatted timestamp values
-  final String formattedDateTime = "2025-06-19 06:26:30";
-  final String userLogin = "devivekrt";
-
   Future<void> _userLogin() async {
     setState(() {
       _isLoading = true;
@@ -49,45 +44,33 @@ class _LoginState extends State<Login> {
         String email = _emailController.text.trim();
         String password = _passwordController.text.trim();
 
-        // Start multiple operations in parallel:
-        // 1. Begin Firebase Auth process
-        // 2. Query student database
-        // 3. Query librarian database
-        final firebaseAuthFuture = FirebaseAuth.instance
-            .signInWithEmailAndPassword(email: email, password: password);
-
-        // Database queries already run in parallel with Future.wait
-        final databaseQueriesFuture = Future.wait([
-          databaseRef
-              .child("${SmartLib.constPath}/students")
-              .orderByChild(SmartLib.constEmail)
-              .equalTo(email)
-              .once(),
-          databaseRef
-              .child("${SmartLib.constPath}/librarians")
-              .orderByChild(SmartLib.constEmail)
-              .equalTo(email)
-              .once(),
-        ]);
-
-        // Run Firebase Auth and database queries in parallel
-        // This is a key optimization - we don't wait for DB queries to complete before starting auth
-        final results = await Future.wait([
-          firebaseAuthFuture.then((_) => true).catchError((_) => false),
-          databaseQueriesFuture,
-        ]);
-
-        // Check Firebase Auth result
-        final bool isFirebaseAuthSuccessful = results[0] as bool;
-        if (!isFirebaseAuthSuccessful) {
-          // If Firebase Auth failed, throw to be caught by exception handler
-          throw FirebaseAuthException(code: 'auth-failed');
+        // First, attempt Firebase authentication directly to get proper error codes
+        try {
+          await FirebaseAuth.instance.signInWithEmailAndPassword(
+              email: email,
+              password: password
+          );
+        } catch (authError) {
+          // Let the specific Firebase auth error bubble up to the main catch block
+          throw authError;
         }
 
-        // Process database query results - these have already completed in parallel
-        final dbResults = results[1] as List<dynamic>;
-        final DatabaseEvent studentSnapshot = dbResults[0];
-        final DatabaseEvent librarianSnapshot = dbResults[1];
+        // If authentication succeeds, proceed with database checks
+        final databaseQueries = await Future.wait([
+          databaseRef
+              .child(SmartLib.constStudentPath)
+              .orderByChild(SmartLib.constEmail)
+              .equalTo(email)
+              .once(),
+          databaseRef
+              .child(SmartLib.constLibrarianPath)
+              .orderByChild(SmartLib.constEmail)
+              .equalTo(email)
+              .once(),
+        ]);
+
+        final DatabaseEvent studentSnapshot = databaseQueries[0];
+        final DatabaseEvent librarianSnapshot = databaseQueries[1];
 
         // Initialize variables to track role information
         String userRole = "";
@@ -105,8 +88,7 @@ class _LoginState extends State<Login> {
         }
         // Check if user exists in librarian collection
         else if (librarianSnapshot.snapshot.exists) {
-          Map<dynamic, dynamic>? users =
-          librarianSnapshot.snapshot.value as Map?;
+          Map<dynamic, dynamic>? users = librarianSnapshot.snapshot.value as Map?;
           if (users != null) {
             userId = users.keys.first.toString();
             userRole = 'librarian';
@@ -126,22 +108,15 @@ class _LoginState extends State<Login> {
           return;
         }
 
-        // Authentication successful and user found in database
-        SmartLib.email = email;
         SmartLib.userId = userId;
         NotificationService().saveUserToken(userId);
 
-        // Start saving session data and pre-loading the next screen in parallel
-        final saveSessionFuture = AuthService.saveUserSession(userId, userRole);
-
-        // Prepare the next screen widget in advance
-        final nextScreen = userRole == 'student' ? MainTabScreen() : LibrarianNavigationPage();
-
-        // Wait for session data to be saved
-        await saveSessionFuture;
+        // Save session data
+        await AuthService.saveUserSession(userId, userRole);
 
         // Navigate based on role
-        // Use pushAndRemoveUntil to clear the entire navigation stack
+        final nextScreen = userRole == 'student' ? MainTabScreen() : LibrarianNavigationPage();
+
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (context) => nextScreen),
               (route) => false, // Remove all previous routes
@@ -151,25 +126,46 @@ class _LoginState extends State<Login> {
           context,
         ).showSnackBar(SnackBar(content: Text('Login Successful!')));
       } on FirebaseAuthException catch (e) {
-        String errorMessage = 'Invalid email or password';
+        String errorMessage;
 
-        if (e.code == 'wrong-password') {
-          errorMessage = 'Wrong password provided';
-        } else if (e.code == 'user-disabled') {
-          errorMessage = 'This account has been disabled';
-        } else if (e.code == 'user-not-found') {
-          errorMessage = 'No user found with this email';
-        } else if (e.code == 'auth-failed') {
-          errorMessage =
-          'Authentication failed. Please check your credentials.';
+        // Provide detailed error messages based on Firebase error codes
+        switch (e.code) {
+          case 'invalid-email':
+            errorMessage = 'The email address format is invalid.';
+            break;
+          case 'user-disabled':
+            errorMessage = 'This account has been disabled.';
+            break;
+          case 'user-not-found':
+            errorMessage = 'No account found with this email.';
+            break;
+          case 'wrong-password':
+            errorMessage = 'The password is incorrect. Please try again.';
+            break;
+          case 'too-many-requests':
+            errorMessage = 'Too many failed login attempts. Please try again later.';
+            break;
+          case 'network-request-failed':
+            errorMessage = 'Network error. Please check your connection.';
+            break;
+          default:
+            errorMessage = 'Authentication failed. Please check your email and password.';
         }
 
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(errorMessage)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            duration: Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Login error: Please try again')),
+          SnackBar(
+            content: Text('An unexpected error occurred. Please try again.'),
+            duration: Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       } finally {
         setState(() {

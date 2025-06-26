@@ -125,6 +125,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
       // Check for existing user authentication
       String? userId = await AuthService.getUserId();
       String? userRole = await AuthService.getUserRole();
+      print("User ID: $userId, User Role: $userRole");
 
       // If user is authenticated, verify they still exist in database
       if (userId != null && userRole != null) {
@@ -137,7 +138,6 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
 
           if (userSnapshot.snapshot.exists) {
             // User exists, navigate to appropriate home page
-            if (mounted) {
               if (userRole == 'student') {
                 Navigator.pushReplacement(
                   context,
@@ -161,7 +161,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                   ),
                 );
               }
-            }
+
             return;
           }
         } catch (e) {

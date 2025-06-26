@@ -4,8 +4,8 @@ class SmartLib {
   static const String constPassword = "password";
   static const String constUserId = "userId";
   static const String constUserType = "userType";
-  static const String constStudentPath = "users/student";
-  static const String constLibrarianPath = "users/librarian";
+  static const String constStudentPath = "users/students";
+  static const String constLibrarianPath = "users/librarians";
   static const String constLibraryPath = "library";
   static const String constCurrentStatusPath = "currentStatus";
   static const String constName = "name";

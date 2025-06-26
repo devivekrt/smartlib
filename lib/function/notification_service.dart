@@ -252,15 +252,8 @@ class NotificationService {
         return;
       }
 
-      // Save to Firestore - using set with merge to handle new users
-      await _firestore.collection('students').doc(userId).set({
-        'fcmTokens': firestore.FieldValue.arrayUnion([token]),
-        'lastActiveToken': token,
-        'tokenUpdatedAt': firestore.FieldValue.serverTimestamp(),
-      }, firestore.SetOptions(merge: true));
-
       // Save to RTDB
-      await _database.ref('users/students/$userId/fcm').update({
+      await _database.ref('appStatus/$userId/fcm').update({
         'token': token,
         'updatedAt': rtdb.ServerValue.timestamp,
         'platform': _getPlatform(),

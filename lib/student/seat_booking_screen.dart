@@ -1519,7 +1519,7 @@ class _MultiShiftPaymentScreenState extends State<MultiShiftPaymentScreen> {
           if (combinedShiftName.isEmpty) {
             combinedShiftName = shiftName;
           } else {
-            combinedShiftName += "_$shiftName";
+            combinedShiftName += "$shiftName";
           }
 
           // Track shift IDs
@@ -1551,13 +1551,7 @@ class _MultiShiftPaymentScreenState extends State<MultiShiftPaymentScreen> {
           Map<String, dynamic> updateData = {};
           updateData['seats.${widget.selectedSeat}.shifts.${shiftId}.status'] =
               'booked';
-          updateData['seats.${widget.selectedSeat}.shifts.${shiftId}.bookedBy'] =
-              widget.userId;
-          updateData['seats.${widget.selectedSeat}.shifts.${shiftId}.bookingId'] =
-              bookingId;
-          updateData['seats.${widget.selectedSeat}.shifts.${shiftId}.bookedAt'] =
-              '${DateTime.now().day}-${DateTime.now().month}-${DateTime.now().year}';
-          ;
+
 
           batch.update(libraryRef, updateData);
         }
@@ -1655,7 +1649,6 @@ class _MultiShiftPaymentScreenState extends State<MultiShiftPaymentScreen> {
             "dueDate": calculateDueDate(),
             "totalFee": totalFee,
             "paymentStatus": paymentStatus,
-            "bookingId": bookingId,
              "currentStatus": "joined",
             "shiftCount": widget.selectedShifts.length,
             "isMultipleShifts": widget.selectedShifts.length > 1,

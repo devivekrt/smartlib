@@ -68,6 +68,7 @@ class _SelectPageState extends State<SelectPage> {
                               width: width * 0.4,
                               height: height * 0.3,
                               decoration: BoxDecoration(
+                                image: DecorationImage(image: AssetImage("assets/librarian.webp"),fit: BoxFit.cover),
                                 borderRadius: BorderRadius.circular(20),
                                 gradient: LinearGradient(
                                   colors: [Colors.blueAccent, Colors.lightBlue],
@@ -107,6 +108,8 @@ class _SelectPageState extends State<SelectPage> {
                               width: width * 0.4,
                               height: height * 0.3,
                               decoration: BoxDecoration(
+                                image: DecorationImage(image: AssetImage("assets/student.webp"),fit: BoxFit.cover),
+
                                 borderRadius: BorderRadius.circular(20),
                                 gradient: LinearGradient(
                                   colors: [

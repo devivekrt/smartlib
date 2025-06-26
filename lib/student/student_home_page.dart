@@ -512,12 +512,7 @@ class _StudentHomePageState extends State<StudentHomePage> {
 
               Gap(20),
 
-              // Recent Seat History
-              _isLoadingHistory
-                  ? _buildLoadingCard(height: 240)
-                  : _buildSeatHistorySection(textColor, cardColor),
 
-              Gap(20),
             ],
           ),
         ),
@@ -691,7 +686,7 @@ class _StudentHomePageState extends State<StudentHomePage> {
     );
   }
 
-  // Advanced Student Detail Current Status Card - Enhanced without check-in restriction
+  // Advanced Student Detail Current Status Card
   Widget _buildCurrentStatusCard(double width) {
 
     // Has data flag - check if we have meaningful data to display
@@ -1795,154 +1790,6 @@ class _StudentHomePageState extends State<StudentHomePage> {
             },
           ),
         )
-      ],
-    );
-  }
-
-  // Seat History Section (updated to use real data)
-  Widget _buildSeatHistorySection(Color textColor, Color cardColor) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              "Recent Sessions",
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: textColor,
-              ),
-            ),
-            TextButton(
-              onPressed: () {},
-              child: Text(
-                "See All",
-                style: TextStyle(
-                  color: Color(0xff2D5BFF),
-                  fontSize: 14,
-                ),
-              ),
-            ),
-          ],
-        ),
-        Gap(10),
-        //seat booking history
-        _seatHistory.isEmpty
-            ? Container(
-          height: 100,
-          alignment: Alignment.center,
-          child: Text(
-            "No recent booking history",
-            style: TextStyle(color: textColor.withOpacity(0.7)),
-          ),
-        )
-            : Column(
-          children: _seatHistory.map((session) {
-            return Container(
-              margin: EdgeInsets.only(bottom: 10),
-              padding: EdgeInsets.all(15),
-              decoration: BoxDecoration(
-                color: cardColor,
-                borderRadius: BorderRadius.circular(15),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black12,
-                    blurRadius: 5,
-                    offset: Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    height: 45,
-                    width: 45,
-                    decoration: BoxDecoration(
-                      color: Color(0xff1940CC).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Center(
-                      child: Text(
-                        session['id']?.toString() ?? 'NA',
-                        style: TextStyle(
-                          color: Color(0xff1940CC),
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                  SizedBox(width: 15),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          session['library']?.toString() ?? 'Unknown Library',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                            color: textColor,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        SizedBox(height: 3),
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.calendar_today,
-                              color: textColor.withOpacity(0.7),
-                              size: 14,
-                            ),
-                            SizedBox(width: 5),
-                            Text(
-                              _formatDate(session['date']?.toString() ?? ''),
-                              style: TextStyle(
-                                color: textColor.withOpacity(0.7),
-                                fontSize: 13,
-                              ),
-                            ),
-                            SizedBox(width: 10),
-                            Icon(
-                              Icons.access_time,
-                              color: textColor.withOpacity(0.7),
-                              size: 14,
-                            ),
-                            SizedBox(width: 5),
-                            Text(
-                              session['duration']?.toString() ?? 'N/A',
-                              style: TextStyle(
-                                color: textColor.withOpacity(0.7),
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: Color(0xff43A047).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-                    child: Text(
-                      _formatStatus(session['status']?.toString() ?? 'Unknown'),
-                      style: TextStyle(
-                        color: Color(0xff43A047),
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }).toList(),
-        ),
       ],
     );
   }
