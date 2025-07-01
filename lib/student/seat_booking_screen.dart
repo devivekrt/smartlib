@@ -6,6 +6,7 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/services.dart';
 import 'package:smartlib/data/string.dart';
 import 'package:smartlib/models/library_model.dart';
+import 'package:smartlib/student/main_tab_screen.dart';
 import 'package:smartlib/theme/theme.dart';
 
 class SeatBookingScreen extends StatefulWidget {
@@ -24,7 +25,7 @@ class SeatBookingScreen extends StatefulWidget {
 
 class _SeatBookingScreenState extends State<SeatBookingScreen> {
   // Current UTC time as reference
-  final  DateTime _currentUtcTime = DateTime.now().toUtc();
+  final DateTime _currentUtcTime = DateTime.now().toUtc();
 
   // Date selection
   late DateTime _selectedDate;
@@ -1419,7 +1420,7 @@ class _MultiShiftPaymentScreenState extends State<MultiShiftPaymentScreen> {
 
       if (librarySnapshot.exists) {
         final seatsData =
-            librarySnapshot.data()?['seats'] as Map<String, dynamic>?;
+        librarySnapshot.data()?['seats'] as Map<String, dynamic>?;
 
         if (seatsData != null && seatsData[widget.selectedSeat] != null) {
           for (final shiftData in widget.selectedShifts) {
@@ -1451,7 +1452,7 @@ class _MultiShiftPaymentScreenState extends State<MultiShiftPaymentScreen> {
 
       // Create a single booking document in Firestore
       final bookingRef =
-          FirebaseFirestore.instance.collection('seatBookings').doc();
+      FirebaseFirestore.instance.collection('seatBookings').doc();
       final bookingId = bookingRef.id;
 
       // Create a list of shift details to store in the single booking
@@ -1491,7 +1492,7 @@ class _MultiShiftPaymentScreenState extends State<MultiShiftPaymentScreen> {
         // Update the seat status in the library document
         Map<String, dynamic> updateData = {};
         updateData['seats.${widget.selectedSeat}.shifts.${shiftId}.status'] =
-            'booked';
+        'booked';
         updateData['seats.${widget.selectedSeat}.shifts.${shiftId}.bookedBy'] =
             widget.userId;
         updateData['seats.${widget.selectedSeat}.shifts.${shiftId}.bookingId'] =
@@ -1547,13 +1548,6 @@ class _MultiShiftPaymentScreenState extends State<MultiShiftPaymentScreen> {
           }
           combinedFee += fee;
 
-          // Update the seat status for each shift in the library document
-          Map<String, dynamic> updateData = {};
-          updateData['seats.${widget.selectedSeat}.shifts.${shiftId}.status'] =
-              'booked';
-
-
-          batch.update(libraryRef, updateData);
         }
 
         totalFee = combinedFee;
@@ -1592,7 +1586,7 @@ class _MultiShiftPaymentScreenState extends State<MultiShiftPaymentScreen> {
         'totalFee': totalFee,
         'status': 'pending',
         'bookedAt':
-            '${DateTime.now().day}-${DateTime.now().month}-${DateTime.now().year}',
+        '${DateTime.now().day}-${DateTime.now().month}-${DateTime.now().year}',
         'dueDate': calculateDueDate(),
         'paymentStatus': paymentStatus,
         'paymentMethod': paymentMethod,
@@ -1609,18 +1603,48 @@ class _MultiShiftPaymentScreenState extends State<MultiShiftPaymentScreen> {
       await FirebaseDatabase.instance
           .ref()
           .child(
-            "users/students/${widget.userId}/joinedLibraries/${widget.library.id}",
-          )
-          .set(true);
+        "users/students/${widget.userId}/joinedLibraries/${widget.library.id}",
+      )
+          .set({
+        'joinedAt': DateTime.now().toIso8601String(),
+      });
+
+      // ===== ADD STUDENT TO SUBSCRIBERS COLLECTION =====
+      // Get current date in YYYY-MM-DD format
+      final currentDate = DateTime.now();
+      final formattedDate = "${currentDate.year}-${currentDate.month.toString().padLeft(2, '0')}-${currentDate.day.toString().padLeft(2, '0')}";
+
+      // Reference to the library subscribers collection
+      final subscribersRef = FirebaseFirestore.instance
+          .collection('libraries')
+          .doc(widget.library.id)
+          .collection('subscribers')
+          .doc(widget.userId);
+
+      // Add the student to subscribers with subscription data
+      batch.set(subscribersRef, {
+        'email': SmartLib.email,
+        'phone': SmartLib.phone,
+        'dueDate': calculateDueDate(),
+        'studentId': widget.userId,
+        'studentName': SmartLib.studentName,
+        'subscriptionDate': formattedDate,
+        'lastBookingId': bookingId,
+        'subscriptionStatus': 'pending',
+        'shiftStartTime': shiftDetails[0]['shiftStartTime'],
+        'shiftEndTime': shiftDetails[0]['shiftEndTime'],
+        'shiftName': shiftDetails[0]['shiftName'],
+        'shiftFee': shiftDetails[0]['shiftFee'],
+        'joinedAt': timestamp,
+      }, SetOptions(merge: true)); // Use merge option to avoid overwriting existing data
+      // ===== END OF SUBSCRIBERS ADDITION =====
 
       // Update student count in library if this is a new student
       final libraryDocRef = FirebaseFirestore.instance
           .collection("libraries")
           .doc(widget.library.id);
-      batch.update(libraryDocRef, {'students': FieldValue.increment(1)});
+      batch.update(libraryDocRef, {'students': FieldValue.increment(1),'availableSeats': FieldValue.increment(-1)});
 
-      // Update available seats count
-      batch.update(libraryDocRef, {'availableSeats': FieldValue.increment(-1)});
 
       // Execute the batch
       await batch.commit();
@@ -1636,23 +1660,24 @@ class _MultiShiftPaymentScreenState extends State<MultiShiftPaymentScreen> {
           .ref()
           .child("users/students/${widget.userId}/currentStatus")
           .set({
-            "currentLibraryId": widget.library.id,
-            "currentSeatNo": widget.selectedSeat,
-            "shiftStartTime": shiftDetails[0]['shiftStartTime'],
-            "shiftEndTime": shiftDetails[0]['shiftEndTime'],
-            "shiftName": shiftDetails[0]['shiftName'],
-            if (widget.selectedShifts.length == 1)
-              "shiftId": widget.selectedShifts[0]['id'],
-            if (widget.selectedShifts.length > 1 &&
-                shiftDetails[0].containsKey('shiftIds'))
-              "shiftIds": shiftDetails[0]['shiftIds'],
-            "dueDate": calculateDueDate(),
-            "totalFee": totalFee,
-            "paymentStatus": paymentStatus,
-             "currentStatus": "joined",
-            "shiftCount": widget.selectedShifts.length,
-            "isMultipleShifts": widget.selectedShifts.length > 1,
-          });
+        "currentLibraryId": widget.library.id,
+        "currentSeatNo": widget.selectedSeat,
+        "shiftStartTime": shiftDetails[0]['shiftStartTime'],
+        "shiftEndTime": shiftDetails[0]['shiftEndTime'],
+        "shiftName": shiftDetails[0]['shiftName'],
+        if (widget.selectedShifts.length == 1)
+          "shiftId": widget.selectedShifts[0]['id'],
+        if (widget.selectedShifts.length > 1 &&
+            shiftDetails[0].containsKey('shiftIds'))
+          "shiftIds": shiftDetails[0]['shiftIds'],
+        "dueDate": calculateDueDate(),
+        "totalFee": totalFee,
+        "paymentStatus": paymentStatus,
+        "currentStatus": "joined",
+        "shiftCount": widget.selectedShifts.length,
+        "isMultipleShifts": widget.selectedShifts.length > 1,
+        "bookingId": bookingId, // Add the booking ID to current status
+      });
 
       // Show success screen with the single bookingId
       Navigator.pushReplacement(
@@ -1660,17 +1685,17 @@ class _MultiShiftPaymentScreenState extends State<MultiShiftPaymentScreen> {
         MaterialPageRoute(
           builder:
               (context) => MultiBookingConfirmationScreen(
-                library: widget.library,
-                bookingIds: [bookingId], // Passing a list with a single ID
-                seatNo: widget.selectedSeat,
-                selectedShifts: widget.selectedShifts,
-                date: widget.selectedDate,
-                paymentStatus: paymentStatus,
-                paymentMethod: paymentMethod,
-                totalFee: totalFee, // Use our calculated totalFee
-              ),
+            library: widget.library,
+            bookingIds: [bookingId], // Passing a list with a single ID
+            seatNo: widget.selectedSeat,
+            selectedShifts: widget.selectedShifts,
+            date: widget.selectedDate,
+            paymentStatus: paymentStatus,
+            paymentMethod: paymentMethod,
+            totalFee: totalFee, // Use our calculated totalFee
+          ),
         ),
-      ).then((_){
+      ).then((_) {
         // Return to library screen with success result
         Navigator.of(context).popUntil((route) => route.isFirst);
       });
@@ -2476,72 +2501,7 @@ class MultiBookingConfirmationScreen extends StatelessWidget {
                                 }).toList(),
                           ),
 
-                          // Add option to add to calendar
-                          SizedBox(height: 20),
-                          Center(
-                            child: TextButton.icon(
-                              onPressed: () {
-                                // Add to calendar data would go here
-
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Added to calendar'),
-                                    backgroundColor: Colors.green,
-                                  ),
-                                );
-                              },
-                              icon: Icon(
-                                Icons.calendar_month,
-                                color: Colors.amber,
-                              ),
-                              label: Text(
-                                'Add to Calendar',
-                                style: TextStyle(
-                                  color: Colors.amber,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              style: TextButton.styleFrom(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 12,
-                                ),
-                                backgroundColor: Colors.amber.withOpacity(0.1),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  side: BorderSide(
-                                    color: Colors.amber.withOpacity(0.3),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
                         ],
-                      ),
-                    ),
-
-                    SizedBox(height: 24),
-
-                    // Share button
-                    OutlinedButton.icon(
-                      onPressed: () {
-                        // Share booking details
-                        final String shareText =
-                            'I booked seat $seatNo at ${library.libraryName} on ${_formatDateForDisplay(date)}';
-
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Sharing booking details')),
-                        );
-                      },
-                      icon: Icon(Icons.share, size: 18),
-                      label: Text('Share Booking Details'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        side: BorderSide(color: Colors.grey[700]!),
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
                       ),
                     ),
                   ],
@@ -2556,7 +2516,11 @@ class MultiBookingConfirmationScreen extends StatelessWidget {
               child: ElevatedButton(
                 onPressed: () {
                   // Return to library screen with success result
-                  Navigator.of(context).popUntil((route) => route.isFirst);
+                  Navigator.pushAndRemoveUntil(
+                    context,
+                    MaterialPageRoute(builder: (context) => MainTabScreen()),
+                    (route) => false,
+                  );
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.amber,

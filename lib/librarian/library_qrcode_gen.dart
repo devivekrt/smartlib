@@ -60,7 +60,7 @@ class _LibraryQRGeneratorScreenState extends State<LibraryQRGeneratorScreen> wit
     return '${widget.libraryId}_SMARTLIB';
   }
 
-  // Save QR code using a direct approach without method channels
+  // Save QR code using a
   Future<void> _saveQRToGallery() async {
     setState(() {
       _isGenerating = true;
@@ -74,11 +74,11 @@ class _LibraryQRGeneratorScreenState extends State<LibraryQRGeneratorScreen> wit
       ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
 
       if (byteData != null) {
-        // Save to temporary directory
-        final tempDir = await getTemporaryDirectory();
+        // Save to phone storage download directory
+        final saveDir = await getDownloadsDirectory();
         final fileName = "SmartLib_QR_${widget.libraryId}_${DateTime.now().millisecondsSinceEpoch}.png";
-        final file = File('${tempDir.path}/$fileName');
-
+        // save the image in the phone gallery
+        final file = File('${saveDir!.absolute}/$fileName');
         // Write bytes to file
         await file.writeAsBytes(byteData.buffer.asUint8List());
 
@@ -198,7 +198,6 @@ class _LibraryQRGeneratorScreenState extends State<LibraryQRGeneratorScreen> wit
               height: 150,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: accentColor.withOpacity(0.1),
               ),
             ),
           ),
@@ -210,7 +209,6 @@ class _LibraryQRGeneratorScreenState extends State<LibraryQRGeneratorScreen> wit
               height: 200,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: secondaryAccentColor.withOpacity(0.1),
               ),
             ),
           ),
@@ -242,7 +240,6 @@ class _LibraryQRGeneratorScreenState extends State<LibraryQRGeneratorScreen> wit
                               style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
-                                color: accentColor,
                                 letterSpacing: 1.5,
                               ),
                             ),
@@ -304,11 +301,6 @@ class _LibraryQRGeneratorScreenState extends State<LibraryQRGeneratorScreen> wit
                                     Container(
                                       padding: EdgeInsets.symmetric(horizontal: 18, vertical: 10),
                                       decoration: BoxDecoration(
-                                        gradient: LinearGradient(
-                                          colors: [Colors.green, accentColor, Colors.red],
-                                          begin: Alignment.centerLeft,
-                                          end: Alignment.centerRight,
-                                        ),
                                         borderRadius: BorderRadius.circular(30),
                                         boxShadow: [
                                           BoxShadow(
@@ -345,8 +337,9 @@ class _LibraryQRGeneratorScreenState extends State<LibraryQRGeneratorScreen> wit
                                     RepaintBoundary(
                                       key: _qrKey,
                                       child: Container(
-                                        width: 280,
-                                        height: 280,
+                                        width: MediaQuery.of(context).size.width - 50,
+
+                                        height: MediaQuery.of(context).size.width - 100,
                                         padding: EdgeInsets.all(16),
                                         decoration: BoxDecoration(
                                           color: Colors.white,

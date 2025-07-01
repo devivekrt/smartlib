@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
@@ -5,6 +6,7 @@ import 'package:gap/gap.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:smartlib/data/string.dart';
 import 'package:smartlib/librarian/librarian_home_page.dart';
+import 'package:smartlib/library/library_details_upload.dart';
 import 'package:smartlib/theme/theme.dart';
 import 'package:smartlib/student/library_market_place.dart';
 import 'package:smartlib/student/select_page.dart';
@@ -47,8 +49,8 @@ class _LoginState extends State<Login> {
         // First, attempt Firebase authentication directly to get proper error codes
         try {
           await FirebaseAuth.instance.signInWithEmailAndPassword(
-              email: email,
-              password: password
+            email: email,
+            password: password,
           );
         } catch (authError) {
           // Let the specific Firebase auth error bubble up to the main catch block
@@ -74,23 +76,28 @@ class _LoginState extends State<Login> {
 
         // Initialize variables to track role information
         String userRole = "";
-        String userId = "";
+        String studentId = "";
+        String librarianId = "";
         bool foundInDatabase = false;
+        Map<dynamic, dynamic>? userData;
 
         // Check if user exists in student collection
         if (studentSnapshot.snapshot.exists) {
           Map<dynamic, dynamic>? users = studentSnapshot.snapshot.value as Map?;
           if (users != null) {
-            userId = users.keys.first.toString();
+            studentId = users.keys.first.toString();
+            userData = users[studentId] as Map<dynamic, dynamic>?;
             userRole = 'student';
             foundInDatabase = true;
           }
         }
         // Check if user exists in librarian collection
         else if (librarianSnapshot.snapshot.exists) {
-          Map<dynamic, dynamic>? users = librarianSnapshot.snapshot.value as Map?;
+          Map<dynamic, dynamic>? users =
+              librarianSnapshot.snapshot.value as Map?;
           if (users != null) {
-            userId = users.keys.first.toString();
+            librarianId = users.keys.first.toString();
+            userData = users[librarianId] as Map<dynamic, dynamic>?;
             userRole = 'librarian';
             foundInDatabase = true;
           }
@@ -98,7 +105,7 @@ class _LoginState extends State<Login> {
 
         // If authenticated with Firebase but not found in our database, sign out
         if (!foundInDatabase) {
-          await FirebaseAuth.instance.signOut();
+          await FirebaseAuth.instance.currentUser?.delete();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Email not registered in our system')),
           );
@@ -107,20 +114,60 @@ class _LoginState extends State<Login> {
           });
           return;
         }
-
-        SmartLib.userId = userId;
-        NotificationService().saveUserToken(userId);
-
-        // Save session data
-        await AuthService.saveUserSession(userId, userRole);
+        SmartLib.studentId = studentId;
+        SmartLib.librarianId = librarianId;
+        if (userRole == 'student') {
+          SmartLib.userType = 'student';
+          NotificationService().saveUserToken(studentId);
+          // Save session data
+          await AuthService.saveUserSession(studentId, 'student');
+        } else if (userRole == 'librarian') {
+          SmartLib.userType = 'librarian';
+          NotificationService().saveUserToken(librarianId);
+          // Save session data
+          await AuthService.saveUserSession(librarianId, 'librarian');
+        }
 
         // Navigate based on role
-        final nextScreen = userRole == 'student' ? MainTabScreen() : LibrarianNavigationPage();
+        if (userRole == 'student') {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => MainTabScreen()),
+            (route) => false,
+          );
+        } else {
+          // Check if the librarian has an associated library
+          if (userData != null && userData['libraryAdded'] == true) {
+            // Librarian has a library, proceed to normal navigation
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(
+                builder: (context) => LibrarianNavigationPage(),
+              ),
+              (route) => false,
+            );
+          } else {
+            // Librarian doesn't have a library, redirect to create library page
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(
+                builder:
+                    (context) => LibraryDetailsUpload(librarianId: librarianId),
+              ),
+            );
 
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (context) => nextScreen),
-              (route) => false, // Remove all previous routes
-        );
+            // Show a guiding message
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Please complete setting up your library to continue',
+                ),
+                duration: Duration(seconds: 4),
+              ),
+            );
+            setState(() {
+              _isLoading = false;
+            });
+            return;
+          }
+        }
 
         ScaffoldMessenger.of(
           context,
@@ -143,13 +190,15 @@ class _LoginState extends State<Login> {
             errorMessage = 'The password is incorrect. Please try again.';
             break;
           case 'too-many-requests':
-            errorMessage = 'Too many failed login attempts. Please try again later.';
+            errorMessage =
+                'Too many failed login attempts. Please try again later.';
             break;
           case 'network-request-failed':
             errorMessage = 'Network error. Please check your connection.';
             break;
           default:
-            errorMessage = 'Authentication failed. Please check your email and password.';
+            errorMessage =
+                'Authentication failed. Please check your email and password.';
         }
 
         ScaffoldMessenger.of(context).showSnackBar(
@@ -179,11 +228,10 @@ class _LoginState extends State<Login> {
     }
   }
 
+  // Rest of the class remains the same
   @override
   Widget build(BuildContext context) {
-    return _isLoading
-        ? _buildLoadingOverlay()
-        : _buildLoginScreen();
+    return _isLoading ? _buildLoadingOverlay() : _buildLoginScreen();
   }
 
   // Full screen loading overlay without using Stack
@@ -197,21 +245,19 @@ class _LoginState extends State<Login> {
               child: Container(
                 padding: EdgeInsets.all(32),
                 decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 20,
-                        spreadRadius: 5,
-                      )
-                    ]
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 20,
+                      spreadRadius: 5,
+                    ),
+                  ],
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    CircularProgressIndicator(
-                      color: const Color(0xff1940CC),
-                    ),
+                    CircularProgressIndicator(color: const Color(0xff1940CC)),
                     SizedBox(height: 16),
                     Text(
                       "Logging in...",
@@ -224,17 +270,13 @@ class _LoginState extends State<Login> {
                     Text(
                       "Please wait while we verify your credentials",
                       textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[600],
-                      ),
+                      style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                     ),
                   ],
                 ),
               ),
             ),
           ),
-
         ],
       ),
     );
@@ -242,6 +284,9 @@ class _LoginState extends State<Login> {
 
   // Updated Login Screen
   Widget _buildLoginScreen() {
+    // Login screen implementation remains the same
+    // ...
+    // (Your existing _buildLoginScreen code here)
     return SafeArea(
       child: Scaffold(
         appBar: AppBar(
@@ -382,7 +427,6 @@ class _LoginState extends State<Login> {
                     ],
                   ),
                   const SizedBox(height: 20),
-
                 ],
               ),
             ),
@@ -392,8 +436,10 @@ class _LoginState extends State<Login> {
     );
   }
 
-// Add this method to handle the forgot password functionality
   void _showForgotPasswordDialog() {
+    // Forgot password dialog implementation remains the same
+    // ...
+    // (Your existing _showForgotPasswordDialog code here)
     final TextEditingController emailController = TextEditingController();
     final GlobalKey<FormState> formKey = GlobalKey<FormState>();
     bool isLoading = false;
@@ -425,7 +471,9 @@ class _LoginState extends State<Login> {
                         if (value == null || value.isEmpty) {
                           return 'Please enter email address';
                         }
-                        if (!RegExp(r"^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$").hasMatch(value)) {
+                        if (!RegExp(
+                          r"^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$",
+                        ).hasMatch(value)) {
                           return 'Please enter a valid email address';
                         }
                         return null;
@@ -445,72 +493,80 @@ class _LoginState extends State<Login> {
                   ),
                 ),
                 ElevatedButton(
-                  onPressed: isLoading
-                      ? null
-                      : () async {
-                    if (formKey.currentState!.validate()) {
-                      setState(() {
-                        isLoading = true;
-                      });
+                  onPressed:
+                      isLoading
+                          ? null
+                          : () async {
+                            if (formKey.currentState!.validate()) {
+                              setState(() {
+                                isLoading = true;
+                              });
 
-                      try {
-                        await FirebaseAuth.instance.sendPasswordResetEmail(
-                          email: emailController.text.trim(),
-                        );
+                              try {
+                                await FirebaseAuth.instance
+                                    .sendPasswordResetEmail(
+                                      email: emailController.text.trim(),
+                                    );
 
-                        // Close dialog
-                        Navigator.of(context).pop();
+                                // Close dialog
+                                Navigator.of(context).pop();
 
-                        // Show success message
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Password reset link has been sent to your email'),
-                            backgroundColor: Colors.green,
-                          ),
-                        );
-                      } on FirebaseAuthException catch (e) {
-                        String errorMessage = 'Failed to send password reset email';
+                                // Show success message
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Password reset link has been sent to your email',
+                                    ),
+                                    backgroundColor: Colors.green,
+                                  ),
+                                );
+                              } on FirebaseAuthException catch (e) {
+                                String errorMessage =
+                                    'Failed to send password reset email';
 
-                        switch (e.code) {
-                          case 'user-not-found':
-                            errorMessage = 'No user found with this email address';
-                            break;
-                          case 'invalid-email':
-                            errorMessage = 'Email address is invalid';
-                            break;
-                          case 'too-many-requests':
-                            errorMessage = 'Too many requests. Please try again later';
-                            break;
-                        }
+                                switch (e.code) {
+                                  case 'user-not-found':
+                                    errorMessage =
+                                        'No user found with this email address';
+                                    break;
+                                  case 'invalid-email':
+                                    errorMessage = 'Email address is invalid';
+                                    break;
+                                  case 'too-many-requests':
+                                    errorMessage =
+                                        'Too many requests. Please try again later';
+                                    break;
+                                }
 
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(errorMessage),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
-                      } finally {
-                        if (mounted) {
-                          setState(() {
-                            isLoading = false;
-                          });
-                        }
-                      }
-                    }
-                  },
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(errorMessage),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              } finally {
+                                if (mounted) {
+                                  setState(() {
+                                    isLoading = false;
+                                  });
+                                }
+                              }
+                            }
+                          },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: DarkColor.highlightColor,
                   ),
-                  child: isLoading
-                      ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      color: Colors.white,
-                      strokeWidth: 2.0,
-                    ),
-                  )
-                      : const Text('Send Reset Link'),
+                  child:
+                      isLoading
+                          ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2.0,
+                            ),
+                          )
+                          : const Text('Send Reset Link'),
                 ),
               ],
             );
@@ -519,7 +575,4 @@ class _LoginState extends State<Login> {
       },
     );
   }
-
-
-
 }

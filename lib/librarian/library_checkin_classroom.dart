@@ -330,19 +330,19 @@ class _LibraryCheckinManagementPageState extends State<LibraryCheckinManagementP
                   _selectedShift == 'all',
                       () => _changeShift('all')
               ),
-              SizedBox(width: 8),
+              SizedBox(width: 6),
               _buildFilterChip(
                   'Morning',
                   _selectedShift == 'morning',
                       () => _changeShift('morning')
               ),
-              SizedBox(width: 8),
+              SizedBox(width: 6),
               _buildFilterChip(
                   'Afternoon',
                   _selectedShift == 'afternoon',
                       () => _changeShift('afternoon')
               ),
-              SizedBox(width: 8),
+              SizedBox(width: 6),
               _buildFilterChip(
                   'Evening',
                   _selectedShift == 'evening',

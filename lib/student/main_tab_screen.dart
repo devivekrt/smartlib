@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:smartlib/data/string.dart';
 import 'package:smartlib/student/profile_screen.dart';
 import 'package:smartlib/student/qr_code_screen.dart';
 import 'package:smartlib/student/student_home_page.dart';
+import '../function/student_function.dart';
 import 'activity_screen.dart';
 import 'library_market_place.dart';
 
@@ -18,13 +20,14 @@ class _MainTabScreenState extends State<MainTabScreen> {
   // Page widgets: 0=Home, 1=Marketplace, 2=Activity, 3=Profile
   late final List<Widget> _pages = [
     StudentHomePage(
-      onScanButtonPressed: () => _selectQRScan(),
+      onMarketPlace: () => _selectTab(1),
       onBookSeatPressed: () => _selectTab(1),
     ),
     LibraryMarketplace(isSignedUp: false),
     ActivityScreen(), // Create this page for check-in and checkout
     ProfileScreen(),
   ];
+
 
   void _selectTab(int index) {
     setState(() {

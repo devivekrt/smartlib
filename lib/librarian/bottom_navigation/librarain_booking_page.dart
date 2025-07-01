@@ -57,30 +57,7 @@ class LibrarianBookingsPage extends StatelessWidget {
         selectedDateRange,
       );
     }
-    // Get shift name from nested data
-    String shiftName = 'Unknown';
-    final booking = filteredBookings.isNotEmpty ? filteredBookings[0] : {};
-    try {
-      // Correctly access the shifts as a list (array)
-      if (booking['shifts'] != null) {
-        // Check if shifts is a List
-        if (booking['shifts'] is List && booking['shifts'].isNotEmpty) {
-          final shiftsList = booking['shifts'] as List;
-          print("Shifts List: $shiftsList");
-          // Get first shift from the list (or use appropriate data to select the right one)
-          if (shiftsList.isNotEmpty) {
-            final firstShift = shiftsList[0];
-            if (firstShift is Map && firstShift['shiftName'] != null) {
-              shiftName = firstShift['shiftName'].toString();
-              print("Shift Name: $shiftName");
-            }
-          }
-        }
-      }
-    } catch (e) {
-      print("Error accessing shifts data: $e");
 
-    }
 
 
     // Group filtered bookings by date
@@ -485,17 +462,7 @@ class LibrarianBookingsPage extends StatelessWidget {
                                     // Booking details
                                     Row(
                                       children: [
-                                        Icon(
-                                          Icons.access_time,
-                                          size: 14,
-                                          color: DarkColor.text.withOpacity(0.7),
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          shiftName,
-                                          style: TextStyle(color: DarkColor.text),
-                                        ),
-                                        const SizedBox(width: 16),
+
                                         Icon(
                                           Icons.confirmation_number,
                                           size: 14,

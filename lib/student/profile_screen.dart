@@ -12,7 +12,8 @@ import 'package:smartlib/function/student_function.dart';
 import 'package:smartlib/student/edit_profile_page.dart';
 import 'package:smartlib/student/welcomescreen.dart';
 
-import 'booking_history_screen.dart';
+import 'my_bookings_screen.dart';
+import 'notification_center.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({Key? key}) : super(key: key);
@@ -263,26 +264,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 fontWeight: FontWeight.bold,
                                 color: textColor,
                               ),
-                            ),
-                            Row(
-                              children: [
-                                IconButton(
-                                  icon: Icon(Icons.notifications_outlined),
-                                  onPressed: () {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text('Notifications')),
-                                    );
-                                  },
-                                ),
-                                IconButton(
-                                  icon: Icon(Icons.settings_outlined),
-                                  onPressed: () {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text('Settings')),
-                                    );
-                                  },
-                                ),
-                              ],
                             ),
                           ],
                         ),
@@ -560,7 +541,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 textColor,
                                   onTap: () {
                                     // Navigate to edit profile page
-                                    Navigator.push(context, MaterialPageRoute(builder: (context)=> BookingHistoryScreen()));
+                                    Navigator.push(context, MaterialPageRoute(builder: (context)=> MyBookingsScreen()));
                                   }
                               ),
                               Divider(color: textColor.withOpacity(0.1), height: 0),

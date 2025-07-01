@@ -264,6 +264,8 @@ class AuthFunctions {
 
       // Save the complete user data to Firebase
       await userRef.set(userData);
+      // Save session data
+      await AuthService.saveUserSession(librarianId, "student");
       SmartLib.userId = librarianId;
       SmartLib.userType = "librarian";
 
@@ -349,6 +351,8 @@ class AuthFunctions {
       );
 
       await userRef.set(student.toJson());
+      // Save session data
+      await AuthService.saveUserSession(studentId, "student");
       SmartLib.userId = studentId;
       SmartLib.userType = "student";
 

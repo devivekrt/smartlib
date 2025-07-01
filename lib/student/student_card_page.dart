@@ -17,9 +17,6 @@ class StudentCardPage extends StatefulWidget {
 }
 
 class _StudentCardPageState extends State<StudentCardPage> with SingleTickerProviderStateMixin {
-  // Current timestamp - UPDATED
-  final String formattedDateTime = "2025-06-21 12:54:33";
-  final String userLogin = "devivekrt";
 
   // Student data
   Map<String, dynamic> _userData = {};
@@ -29,7 +26,6 @@ class _StudentCardPageState extends State<StudentCardPage> with SingleTickerProv
   // Card properties
   final double _cardAspectRatio = 1.586; // Standard ID card aspect ratio
   bool _isLoading = true;
-  bool _isExpanded = false;
   bool _showQrCode = false;
 
   // Animation controller for flipping card
@@ -60,7 +56,7 @@ class _StudentCardPageState extends State<StudentCardPage> with SingleTickerProv
     super.dispose();
   }
 
-  // Load student data
+  // Load student data - FIXED VERSION
   Future<void> _loadStudentData() async {
     setState(() {
       _isLoading = true;
@@ -69,27 +65,36 @@ class _StudentCardPageState extends State<StudentCardPage> with SingleTickerProv
     try {
       final userId = SmartLib.userId;
 
-      // Get user data from Realtime Database
-      final userSnapshot = await FirebaseDatabase.instance
-          .ref()
-          .child('users/students/$userId')
-          .get();
+      // First load student profile data
+      final userRef = FirebaseDatabase.instance.ref().child('users/students/$userId');
+      final userSnapshot = await userRef.get();
 
       if (userSnapshot.exists) {
-        final userData = userSnapshot.value as Map<dynamic, dynamic>;
+        // Convert dynamic to typed
+        final Map<dynamic, dynamic> userData = userSnapshot.value as Map<dynamic, dynamic>;
         Map<String, dynamic> typedUserData = {};
 
+        // Convert all data to strings
         userData.forEach((key, value) {
-          typedUserData[key.toString()] = value;
+          if (key != 'currentStatus') {
+            typedUserData[key.toString()] = value;
+          }
         });
 
-        // Get current status
+        // Get current status separately
+        final statusRef = FirebaseDatabase.instance.ref().child('users/students/$userId/currentStatus');
+        final statusSnapshot = await statusRef.get();
+
         Map<String, dynamic> currentStatus = {};
-        if (typedUserData.containsKey('currentStatus') && typedUserData['currentStatus'] is Map) {
-          final statusData = typedUserData['currentStatus'] as Map<dynamic, dynamic>;
+        if (statusSnapshot.exists) {
+          final Map<dynamic, dynamic> statusData = statusSnapshot.value as Map<dynamic, dynamic>;
+
+          // Convert all status data to strings
           statusData.forEach((key, value) {
             currentStatus[key.toString()] = value;
           });
+
+          print("Current Status Data: $currentStatus"); // Debug print
         }
 
         // Get registered libraries
@@ -100,10 +105,32 @@ class _StudentCardPageState extends State<StudentCardPage> with SingleTickerProv
           _currentStatus = currentStatus;
           _isLoading = false;
         });
+
+        print("User Data: $_userData"); // Debug print
       } else {
-        setState(() {
-          _isLoading = false;
-        });
+        print("User data not found in database"); // Debug print
+
+        // Try to get at least some basic info from auth if available
+        try {
+          final userDoc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
+          if (userDoc.exists) {
+            setState(() {
+              _userData = userDoc.data() ?? {};
+              _isLoading = false;
+            });
+
+            print("User data from Firestore: $_userData"); // Debug print
+          } else {
+            setState(() {
+              _isLoading = false;
+            });
+          }
+        } catch (e) {
+          print("Error getting user from Firestore: $e");
+          setState(() {
+            _isLoading = false;
+          });
+        }
       }
     } catch (e) {
       print('Error loading student data: $e');
@@ -117,20 +144,43 @@ class _StudentCardPageState extends State<StudentCardPage> with SingleTickerProv
     }
   }
 
-  // Load registered libraries
+  // Load registered libraries - IMPROVED
   Future<void> _loadRegisteredLibraries(String userId) async {
     try {
-      // Query bookings for this student to find their registered libraries
+      List<Map<String, dynamic>> libraries = [];
+
+      // First check current status for active library
+      if (_currentStatus.isNotEmpty && _currentStatus['currentLibraryId'] != null) {
+        final currentLibraryId = _currentStatus['currentLibraryId'].toString();
+
+        // Get current library details
+        try {
+          final libraryDoc = await FirebaseFirestore.instance
+              .collection('libraries')
+              .doc(currentLibraryId)
+              .get();
+
+          if (libraryDoc.exists) {
+            final libraryData = libraryDoc.data() ?? {};
+            libraryData['libraryId'] = currentLibraryId;
+            libraries.add(libraryData);
+
+            print("Added current library: $currentLibraryId"); // Debug print
+          }
+        } catch (e) {
+          print('Error getting current library details: $e');
+        }
+      }
+
+      // Then query bookings for this student to find other registered libraries
       final bookingsQuery = await FirebaseFirestore.instance
           .collection('seatBookings')
           .where('studentId', isEqualTo: userId)
-          .orderBy('createdAt', descending: true)
-          .limit(10)
+          .limit(5) // Increased limit for more chances to find libraries
           .get();
 
       // Get unique libraries
-      Set<String> libraryIds = {};
-      List<Map<String, dynamic>> libraries = [];
+      Set<String> libraryIds = libraries.map((lib) => lib['libraryId'].toString()).toSet();
 
       for (final doc in bookingsQuery.docs) {
         final data = doc.data();
@@ -149,8 +199,9 @@ class _StudentCardPageState extends State<StudentCardPage> with SingleTickerProv
             if (libraryDoc.exists) {
               final libraryData = libraryDoc.data() ?? {};
               libraryData['libraryId'] = libraryId;
-
               libraries.add(libraryData);
+
+              print("Added library from booking: $libraryId"); // Debug print
 
               // Limit to max 3 libraries
               if (libraries.length >= 3) break;
@@ -161,9 +212,66 @@ class _StudentCardPageState extends State<StudentCardPage> with SingleTickerProv
         }
       }
 
+      // If no libraries found yet, try getting from realtime database
+      if (libraries.isEmpty) {
+        try {
+          final bookingsRef = FirebaseDatabase.instance
+              .ref()
+              .child('users/students/$userId/bookings')
+              .limitToLast(5);
+
+          final bookingsSnapshot = await bookingsRef.get();
+
+          if (bookingsSnapshot.exists) {
+            final bookingsData = bookingsSnapshot.value as Map<dynamic, dynamic>;
+
+            for (var entry in bookingsData.entries) {
+              final bookingData = entry.value as Map<dynamic, dynamic>;
+              final libraryId = bookingData['libraryId']?.toString() ?? '';
+
+              if (libraryId.isNotEmpty && !libraryIds.contains(libraryId)) {
+                libraryIds.add(libraryId);
+
+                // Get library details
+                try {
+                  final libraryRef = FirebaseDatabase.instance
+                      .ref()
+                      .child('libraries/$libraryId');
+
+                  final librarySnapshot = await libraryRef.get();
+
+                  if (librarySnapshot.exists) {
+                    final libData = librarySnapshot.value as Map<dynamic, dynamic>;
+                    Map<String, dynamic> libraryData = {};
+
+                    libData.forEach((key, value) {
+                      libraryData[key.toString()] = value;
+                    });
+
+                    libraryData['libraryId'] = libraryId;
+                    libraries.add(libraryData);
+
+                    print("Added library from Realtime DB: $libraryId"); // Debug print
+
+                    // Limit to max 3 libraries
+                    if (libraries.length >= 3) break;
+                  }
+                } catch (e) {
+                  print('Error getting library from Realtime DB: $e');
+                }
+              }
+            }
+          }
+        } catch (e) {
+          print('Error loading bookings from Realtime DB: $e');
+        }
+      }
+
       setState(() {
         _registeredLibraries = libraries;
       });
+
+      print("Final registered libraries: ${libraries.length}"); // Debug print
     } catch (e) {
       print('Error loading registered libraries: $e');
     }
@@ -188,6 +296,34 @@ class _StudentCardPageState extends State<StudentCardPage> with SingleTickerProv
     return '$userId\_SMARTCARD_$timestamp';
   }
 
+  // Update to include real-time listener for status changes
+  void _setupRealtimeUpdates() {
+    final userId = SmartLib.userId;
+
+    FirebaseDatabase.instance
+        .ref()
+        .child('users/students/$userId/currentStatus')
+        .onValue
+        .listen((event) {
+      if (event.snapshot.exists) {
+        final Map<dynamic, dynamic> statusData = event.snapshot.value as Map<dynamic, dynamic>;
+        Map<String, dynamic> currentStatus = {};
+
+        statusData.forEach((key, value) {
+          currentStatus[key.toString()] = value;
+        });
+
+        setState(() {
+          _currentStatus = currentStatus;
+        });
+
+        print("Status updated in real-time: $_currentStatus"); // Debug print
+      }
+    }, onError: (error) {
+      print("Error in real-time updates: $error");
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
@@ -203,6 +339,11 @@ class _StudentCardPageState extends State<StudentCardPage> with SingleTickerProv
           ),
         ),
         actions: [
+          IconButton(
+            icon: Icon(Icons.refresh),
+            onPressed: _loadStudentData,
+            tooltip: 'Refresh Data',
+          ),
           IconButton(
             icon: Icon(Icons.qr_code),
             onPressed: () {
@@ -410,6 +551,7 @@ class _StudentCardPageState extends State<StudentCardPage> with SingleTickerProv
                     width: double.infinity,
                     padding: EdgeInsets.all(16),
                     decoration: BoxDecoration(
+                      color: isDarkMode ? Colors.grey[800] : Colors.white,
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
@@ -593,6 +735,7 @@ class _StudentCardPageState extends State<StudentCardPage> with SingleTickerProv
     );
   }
 
+  // Rest of your methods (remaining with same implementation)...
   // Build front side of student card
   Widget _buildFrontCard(Color textColor, Color shadowColor) {
     final String studentName = _userData['fullName'] ?? _userData['name'] ?? 'Student Name';

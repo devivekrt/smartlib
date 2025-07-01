@@ -1,6 +1,10 @@
+// Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): 2025-06-29 10:10:32
+// Current User's Login: devivekrt
+
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
@@ -14,9 +18,14 @@ import 'package:path_provider/path_provider.dart';
 import 'package:smartlib/data/string.dart';
 import 'package:smartlib/widgets/solid_button.dart';
 import 'package:intl/intl.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../function/student_location.dart';
+
+// Import the StudentLocationService
 
 class QRScannerScreen extends StatefulWidget {
-  // No parameters used anymore - we'll get everything from the database
   const QRScannerScreen({Key? key}) : super(key: key);
 
   @override
@@ -28,19 +37,31 @@ class _QRScannerScreenState extends State<QRScannerScreen>
   late AnimationController _animationController;
   final MobileScannerController _scannerController = MobileScannerController();
 
+  // Use the location service singleton
+  final _locationService = StudentLocationService();
+
+  // Firebase instances
+  final _firestore = FirebaseFirestore.instance;
+  final _database = FirebaseDatabase.instance;
+
   bool _isProcessingQR = false;
   String _scanMessage = "";
   bool _showSuccess = false;
   bool _showError = false;
   bool _isCheckedIn = false;
   bool _isLoading = true;
+  bool _isLocationChecking = false;
+  bool _isWithinRange = false;
+
+  // Library location data
+  double? _libraryLatitude;
+  double? _libraryLongitude;
+  String? _libraryName;
+  final double _locationCheckRadius = 50.0; // 50 meters radius for check-in
 
   // Current student details
   final String _studentId = SmartLib.userId;
   final String _studentName = SmartLib.studentName;
-
-  // Current Date and Time formatted as required
-  final formattedDateTime = DateTime.now().isUtc;
 
   // Variables to store all currentStatus data
   String _currentLibraryId = '';
@@ -66,14 +87,48 @@ class _QRScannerScreenState extends State<QRScannerScreen>
       duration: Duration(seconds: 2),
     )..repeat(reverse: true);
 
-    // Fetch current status from Firebase
-    _fetchCurrentStatus();
+    // Initialize location service and fetch status data
+    _initializeAndFetchData();
+  }
+
+  // Initialize location service and fetch data
+  Future<void> _initializeAndFetchData() async {
+    try {
+      // Initialize the location service
+      await _locationService.initialize();
+
+      // Fetch current status from Firebase
+      await _fetchCurrentStatus();
+
+      // Update the UI
+      setState(() {
+        _isLoading = false;
+      });
+
+      print('[2025-06-29 10:10:32] devivekrt: QRScannerScreen initialized successfully');
+    } catch (e) {
+      print('[2025-06-29 10:10:32] devivekrt: Error initializing QRScannerScreen: $e');
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  // Show location error message
+  void _showLocationError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 5),
+        )
+    );
   }
 
   // Fetch user's complete current status from Firebase Realtime Database
   Future<void> _fetchCurrentStatus() async {
     try {
-      final statusRef = FirebaseDatabase.instance.ref().child(
+      final statusRef = _database.ref().child(
         'users/students/$_studentId/currentStatus',
       );
 
@@ -99,26 +154,96 @@ class _QRScannerScreenState extends State<QRScannerScreen>
           _dueDate = data['dueDate']?.toString() ?? '';
           _paymentStatus = data['paymentStatus']?.toString() ?? '';
 
-          _streak =
-              (data['streak'] != null)
-                  ? int.tryParse(data['streak'].toString()) ?? 0
-                  : 0;
+          _streak = (data['streak'] != null)
+              ? int.tryParse(data['streak'].toString()) ?? 0
+              : 0;
 
-          _isLoading = false;
+          _checkInTime = data['checkInTime']?.toString() ?? '';
         });
+
+        // If user is checked in or has a current library, fetch the library location
+        if (_isCheckedIn || _currentLibraryId.isNotEmpty) {
+          await _fetchLibraryLocation(_currentLibraryId);
+        }
+
+        print('[2025-06-29 10:10:32] devivekrt: Fetched current status successfully');
       } else {
-        setState(() {
-          _isCheckedIn = false;
-          _isLoading = false;
-        });
+        print('[2025-06-29 10:10:32] devivekrt: No current status data found');
       }
     } catch (e) {
-      print('Error fetching current status: $e');
+      print('[2025-06-29 10:10:32] devivekrt: Error fetching current status: $e');
       setState(() {
         _isCheckedIn = false;
-        _isLoading = false;
       });
     }
+  }
+
+  // Fetch library location from Firestore
+  Future<void> _fetchLibraryLocation(String libraryId) async {
+    try {
+      if (libraryId.isEmpty) {
+        print('[2025-06-29 10:10:32] devivekrt: Library ID is empty');
+        return;
+      }
+
+      final libraryDoc = await _firestore
+          .collection('libraries')
+          .doc(libraryId)
+          .get();
+
+      if (libraryDoc.exists) {
+        final data = libraryDoc.data();
+        if (data != null) {
+          // Store library coordinates as doubles for easier calculation
+          final latStr = data['locationLatitude']?.toString() ?? '';
+          final lngStr = data['locationLongitude']?.toString() ?? '';
+
+          _libraryLatitude = double.tryParse(latStr);
+          _libraryLongitude = double.tryParse(lngStr);
+          _libraryName = data['libraryName']?.toString() ?? 'Library';
+
+          print('[2025-06-29 10:10:32] devivekrt: Fetched library location: $_libraryLatitude, $_libraryLongitude');
+
+          // Check if student is within range of the library
+          await _checkLocationDistance();
+        }
+      } else {
+        print('[2025-06-29 10:10:32] devivekrt: Library document not found');
+      }
+    } catch (e) {
+      print('[2025-06-29 10:10:32] devivekrt: Error fetching library location: $e');
+    }
+  }
+
+  // Check if student is within range of the library using the location service
+  Future<void> _checkLocationDistance() async {
+    setState(() {
+      _isLocationChecking = true;
+    });
+
+    if (_libraryLatitude == null || _libraryLongitude == null) {
+      print('[2025-06-29 10:10:32] devivekrt: Library coordinates not available');
+      setState(() {
+        _isWithinRange = false;
+        _isLocationChecking = false;
+      });
+      return;
+    }
+
+    // Use the location service to check if within range
+    final isNearby = await _locationService.isWithinRange(
+      targetLatitude: _libraryLatitude!,
+      targetLongitude: _libraryLongitude!,
+      radiusMeters: _locationCheckRadius,
+      updateLocationIfStale: true, // Update location if stale
+    );
+
+    setState(() {
+      _isWithinRange = isNearby;
+      _isLocationChecking = false;
+    });
+
+    print('[2025-06-29 10:10:32] devivekrt: Location check result: within range = $_isWithinRange');
   }
 
   @override
@@ -128,7 +253,10 @@ class _QRScannerScreenState extends State<QRScannerScreen>
     super.dispose();
   }
 
-  // Handle QR scan result
+  // Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): 2025-06-29 10:31:19
+// Current User's Login: devivekrt
+
+// Handle QR scan result
   void _onDetect(BarcodeCapture capture) async {
     if (_isProcessingQR) return; // Prevent multiple scans
 
@@ -151,15 +279,63 @@ class _QRScannerScreenState extends State<QRScannerScreen>
       // Process the scanned QR code
       String result;
 
-      // Determine the action based on QR code format
+      // For CHECK-IN: First check location before any further processing
+      if (!_isCheckedIn) {
+        // Parse library ID from QR code
+        String? libraryId;
+
+        if (code.contains('_SMARTLIB')) {
+          final part = code.split('_')[1];
+          libraryId = 'LIB_$part';
+        } else if (code.contains('_CHECKIN') || code.contains('_CHECKOUT')) {
+          final parts = code.split('_');
+          libraryId = "LIB_${parts[1]}"; // Extract library ID
+        } else {
+          throw Exception('Invalid QR code format. Please scan a valid SmartLib QR code.');
+        }
+
+        print("[2025-06-29 10:31:19] devivekrt: Scanned library ID: $libraryId");
+
+        // Fetch library location first
+        await _fetchLibraryLocation(libraryId);
+
+        // Get a fresh location update
+        await _locationService.requestSingleLocationUpdate(highAccuracy: true);
+
+        // Check if user is within range
+        await _checkLocationDistance();
+
+        // STRICT CHECK: If not within range, show error and abort
+        if (!_isWithinRange) {
+          setState(() {
+            _showError = true;
+            _scanMessage = "You must be within ${_locationCheckRadius.toStringAsFixed(0)} meters of ${_libraryName ?? 'the library'} to check in.";
+          });
+
+          // Reset after error
+          Future.delayed(Duration(seconds: 3), () {
+            if (mounted) {
+              setState(() {
+                _isProcessingQR = false;
+                _showError = false;
+                _scanMessage = "";
+                _scannerController.start();
+              });
+            }
+          });
+
+          return; // Exit early, do not proceed with check-in
+        }
+      }
+
+      // Now that location is verified (for check-ins), proceed with QR code processing
       if (code.contains('_SMARTLIB')) {
         // Smart format QR code - auto-detects check-in/check-out
         final part = code.split('_')[1];
         final libraryId = 'LIB_$part';
-        print("Scanned library ID: $libraryId");
-        print("Current library ID: $_currentLibraryId");
+        print("[2025-06-29 10:31:19] devivekrt: Processing libraryId: $libraryId, Current library ID: $_currentLibraryId");
 
-        // Determine if we're checking in or out based on current state
+        // Determine action based on current state
         final action = _isCheckedIn ? "CHECKOUT" : "CHECKIN";
 
         // Process using the handler with attendance tracking
@@ -167,15 +343,14 @@ class _QRScannerScreenState extends State<QRScannerScreen>
       } else if (code.contains('_CHECKIN') || code.contains('_CHECKOUT')) {
         // Legacy format - explicit check-in/check-out QR codes
         final parts = code.split('_');
-        final libraryId = parts[0];
-        final action = parts[1];
+        final libraryId = "LIB_${parts[1]}"; // Extract library ID
+        final action = parts[2]; // Either CHECKIN or CHECKOUT
 
+        // Process using the handler
         result = await _processQRScan(libraryId: libraryId, action: action);
       } else {
         // Invalid QR code format
-        throw Exception(
-          'Invalid QR code format. Please scan a valid SmartLib QR code.',
-        );
+        throw Exception('Invalid QR code format. Please scan a valid SmartLib QR code.');
       }
 
       // Show success or error based on result
@@ -233,7 +408,7 @@ class _QRScannerScreenState extends State<QRScannerScreen>
     }
   }
 
-  // Enhanced QR scan processing with proper attendance tracking
+// Enhanced QR scan processing with proper attendance tracking
   Future<String> _processQRScan({
     required String libraryId,
     required String action,
@@ -242,14 +417,19 @@ class _QRScannerScreenState extends State<QRScannerScreen>
       // Use local timestamp instead of UTC
       final now = DateTime.now();
       // Format time as HH:mm
-      final timeString = DateFormat('HH:mm:ss').format(now);
+      final timeString = DateFormat('HH:mm').format(now);
       // Format date as YYYY-MM-DD for attendance history
       final todayDate = DateFormat('yyyy-MM-dd').format(now);
 
       // Handle check-in
       if (action == "CHECKIN") {
+        // Double-check that user is within range (safety check)
+        if (!_isWithinRange) {
+          return "You must be within ${_locationCheckRadius.toStringAsFixed(0)} meters of ${_libraryName ?? 'the library'} to check in.";
+        }
+
         // First check if user's currentStatus already has valid booking info
-        final statusRef = FirebaseDatabase.instance.ref().child(
+        final statusRef = _database.ref().child(
           'users/students/$_studentId/currentStatus',
         );
         final snapshot = await statusRef.get();
@@ -259,6 +439,7 @@ class _QRScannerScreenState extends State<QRScannerScreen>
           final currentLibraryId = data['currentLibraryId']?.toString() ?? '';
           final currentBookingId = data['bookingId']?.toString() ?? '';
           final seatNo = data['currentSeatNo']?.toString() ?? '';
+          final currentStatus = data['currentStatus']?.toString() ?? '';
           final paymentStatus = data['paymentStatus']?.toString() ?? '';
           final dueDate = data['dueDate']?.toString() ?? '';
 
@@ -306,8 +487,12 @@ class _QRScannerScreenState extends State<QRScannerScreen>
           }
 
           // VALIDATION STEP 4: Check if the booking has valid seat and shift information
-          if (currentBookingId.isEmpty || seatNo.isEmpty || shiftIds.isEmpty) {
+          if (seatNo.isEmpty || shiftIds.isEmpty) {
             return 'Incomplete booking information. Please contact library staff.';
+          }
+          //5. Check if the booking is cancelled
+          if(currentStatus == "none"|| currentStatus.isEmpty) {
+            return 'You have no active booking. Please make a new booking.';
           }
 
           // Check if it's too early to check in (30+ minutes before shift start)
@@ -322,62 +507,75 @@ class _QRScannerScreenState extends State<QRScannerScreen>
                 final shiftHour = int.tryParse(parts[0]) ?? 0;
                 final shiftMinute = int.tryParse(parts[1]) ?? 0;
 
-                // Calculate 30 minutes before shift start
+                // Get current date components for accurate comparison
+                final now = DateTime.now();
+                final currentYear = now.year;
+                final currentMonth = now.month;
+                final currentDay = now.day;
+                final currentHour = now.hour;
+                final currentMinute = now.minute;
+
+                // Create DateTime objects for accurate comparison
                 final shiftStartDateTime = DateTime(
-                  int.parse(todayDate.split('-')[0]), // Year
-                  int.parse(todayDate.split('-')[1]), // Month
-                  int.parse(todayDate.split('-')[2]), // Day
+                  currentYear,
+                  currentMonth,
+                  currentDay,
                   shiftHour,
                   shiftMinute,
                 );
 
-                final earlyCheckinDateTime = shiftStartDateTime.subtract(
-                  Duration(minutes: 30),
+                // Current time as DateTime for comparison
+                final currentDateTime = DateTime(
+                  currentYear,
+                  currentMonth,
+                  currentDay,
+                  currentHour,
+                  currentMinute,
                 );
 
-                // Format for comparison
-                earliestCheckinTime =
-                    "${earlyCheckinDateTime.hour.toString().padLeft(2, '0')}:${earlyCheckinDateTime.minute.toString().padLeft(2, '0')}";
+                // Calculate 30 minutes before shift start
+                final earlyCheckinDateTime = shiftStartDateTime.subtract(
+                  const Duration(minutes: 30),
+                );
 
-                // Compare current time with early check-in time
-                final currentTimeParts = timeString.split(':');
-                final currentHour = int.tryParse(currentTimeParts[0]) ?? 0;
-                final currentMinute = int.tryParse(currentTimeParts[1]) ?? 0;
+                // Format for display in error message
+                earliestCheckinTime = DateFormat('HH:mm').format(earlyCheckinDateTime);
 
-                final currentTimeMinutes = currentHour * 60 + currentMinute;
-                final earlyCheckinMinutes =
-                    earlyCheckinDateTime.hour * 60 +
-                    earlyCheckinDateTime.minute;
-
-                if (currentTimeMinutes < earlyCheckinMinutes) {
+                // Compare using DateTime objects for more reliable comparison
+                if (currentDateTime.isBefore(earlyCheckinDateTime)) {
                   canCheckIn = false;
+                  print("[2025-06-29 10:31:19] devivekrt: Too early to check in. Current time: $currentDateTime, Earliest check-in time: $earlyCheckinDateTime");
+                } else {
+                  print("[2025-06-29 10:31:19] devivekrt: Check-in allowed. Current time: $currentDateTime, Shift start time: $shiftStartDateTime");
                 }
               }
             } catch (e) {
-              print("Error checking shift start time from current status: $e");
+              print("[2025-06-29 10:31:19] devivekrt: Error checking shift start time from current status: $e");
               // Default to allowing check-in if there's an error
               canCheckIn = true;
             }
           }
+
           // If it's too early to check in
           if (!canCheckIn) {
             return 'Too early to check in. You can check in starting at $earliestCheckinTime.';
           }
 
           // All validations passed, proceed with check-in
-          await FirebaseDatabase.instance
+          await _database
               .ref()
               .child("users/students/$_studentId/currentStatus")
               .update({
-                'isCheckedIn': true,
-                'checkInTime': timeString,
-                'checkOutTime': '',
-                'status': 'checkedIn',
-              });
+            'isCheckedIn': true,
+            'checkInTime': timeString,
+            'checkOutTime': '',
+            'status': 'checkedIn',
+            'checkInDate': todayDate, // Also store the date for duration calculation
+          });
 
           // Update all shifts in the library document
           for (String shiftId in shiftIds) {
-            await FirebaseFirestore.instance
+            await _firestore
                 .collection('libraries')
                 .doc(libraryId)
                 .update({'seats.$seatNo.shifts.$shiftId.isCheckedIn': true});
@@ -400,16 +598,17 @@ class _QRScannerScreenState extends State<QRScannerScreen>
           return 'Successfully checked in to seat $seatNo';
         }
 
-        // [Firestore booking search code]
+        // No active booking found
+        return 'No active booking found for this library';
       } else if (action == "CHECKOUT") {
         // Get check-in time from database to calculate duration
         final statusRef =
-            await FirebaseDatabase.instance
-                .ref()
-                .child('users/students/$_studentId/currentStatus')
-                .get();
+        await _database
+            .ref()
+            .child('users/students/$_studentId/currentStatus')
+            .get();
 
-        int durationMinutes = 0;
+        int studyHours = 0;
         List<String> shiftIds = [];
 
         if (statusRef.exists) {
@@ -452,32 +651,32 @@ class _QRScannerScreenState extends State<QRScannerScreen>
                 checkInHour,
                 checkInMinute,
               );
-              final currentDateTime = DateTime.now().toUtc();
+              final currentDateTime = DateTime.now();
               final duration = currentDateTime.difference(checkInDate);
-              durationMinutes = duration.inMinutes;
-              print("Duration in minutes: $durationMinutes");
+              studyHours = duration.inHours;
+              print("[2025-06-29 10:31:19] devivekrt: Study hours: $studyHours");
             } catch (e) {
-              print("Error calculating duration: $e");
+              print("[2025-06-29 10:31:19] devivekrt: Error calculating duration: $e");
             }
           }
         }
 
         // Update student's current status
-        await FirebaseDatabase.instance
+        await _database
             .ref()
             .child("users/students/$_studentId/currentStatus")
             .update({
-              'isCheckedIn': false,
-              'checkOutTime': timeString,
-              'status': 'checkedOut',
-              'studyDuration': durationMinutes,
-            });
+          'isCheckedIn': false,
+          'checkOutTime': timeString,
+          'status': 'checkedOut',
+          'studyDuration': studyHours,
+        });
 
         for (String shiftId in shiftIds) {
-          await FirebaseFirestore.instance
+          await _firestore
               .collection('libraries')
               .doc(libraryId)
-              .update({'seats.$_seatNo.shifts.$shiftId.isCheckedIn': true});
+              .update({'seats.$_seatNo.shifts.$shiftId.isCheckedIn': false});
         }
 
         // Update attendance record in attendanceHistory - update the existing record
@@ -488,20 +687,31 @@ class _QRScannerScreenState extends State<QRScannerScreen>
           shiftIds: shiftIds,
           status: 'completed',
           checkOutTime: timeString,
-          duration: durationMinutes,
+          duration: studyHours,
           date: todayDate,
         );
 
-        return 'Successfully checked out. Duration: ${_formatDuration(durationMinutes)}';
+        return 'Successfully checked out. Duration: ${_formatDuration(studyHours)}';
       }
 
       return 'Unrecognized action';
     } catch (e) {
-      print('Error processing QR scan: $e');
-      return 'Error processing scan: Please try again';
+      print('[2025-06-29 10:31:19] devivekrt: Error processing QR scan: $e');
+      return 'Error processing scan: ${e.toString()}';
     }
   }
 
+// Format duration hours to readable string
+  String _formatDuration(int hours) {
+    if (hours < 1) {
+      return 'Less than 1 hour';
+    } else if (hours == 1) {
+      return '1 hour';
+    } else {
+      return '$hours hours';
+    }
+  }
+  // Update attendance history record
   Future<void> _updateAttendanceHistory({
     required String libraryId,
     required String seatNo,
@@ -531,83 +741,43 @@ class _QRScannerScreenState extends State<QRScannerScreen>
         baseAttendanceData['isMultipleShifts'] = shiftIds.length > 1;
       }
 
-      // Handle CHECK-IN activity if provided
-      if (checkInTime != null &&
-          shiftStartTime != null &&
-          shiftEndTime != null) {
-        // Parse check-in time to DateTime for comparison
-        DateTime parsedCheckInTime = DateTime.parse(checkInTime);
+      // Generate a unique ID for the attendance record if not updating an existing one
+      final String recordId = '$_studentId-$libraryId-$date';
 
-        // Check if check-in time is within allowed constraints
-        // 1. Check-in allowed up to 30 minutes before shift start
-        // 2. Check-in allowed any time between shift start and shift end
-        // 3. Check-in not allowed after shift end
-        bool isValidCheckIn =
-            parsedCheckInTime.isBefore(shiftEndTime) &&
-            (parsedCheckInTime.isAfter(
-                  shiftStartTime.subtract(Duration(minutes: 30)),
-                ) ||
-                parsedCheckInTime.isAtSameMomentAs(
-                  shiftStartTime.subtract(Duration(minutes: 30)),
-                ));
+      // Create attendance record data
+      Map<String, dynamic> attendanceData = {
+        ...baseAttendanceData,
+        'status': status,
+        'date': date,
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
 
-        if (isValidCheckIn) {
-          // Create a separate check-in record
-          Map<String, dynamic> checkInData = {
-            ...baseAttendanceData,
-            'type': 'Check-In',
-            'status': 'checked_in',
-            'checkInTime': checkInTime,
-            'timestamp': FieldValue.serverTimestamp(),
-            'updatedAt': FieldValue.serverTimestamp(),
-          };
-
-          // Store the check-in record
-          await FirebaseFirestore.instance
-              .collection('attendanceHistory')
-              .doc(date)
-              .collection('records')
-              .add(checkInData);
-
-          print('Check-in record saved for $date');
-        } else {
-          print('Check-in denied: Not within allowed time window');
-          // You might want to handle this case, e.g., show an error message to the user
-          throw Exception(
-            'Check-in can only be done 30 minutes before shift start time or within shift hours.',
-          );
-        }
+      // Add check-in time if provided
+      if (checkInTime != null) {
+        attendanceData['checkInTime'] = checkInTime;
       }
 
-      // Handle CHECK-OUT activity if provided (allowed at any time)
+      // Add check-out time if provided
       if (checkOutTime != null) {
-        // Create a separate check-out record
-        Map<String, dynamic> checkOutData = {
-          ...baseAttendanceData,
-          'type': 'Check-Out',
-          'status': 'checked_out',
-          'checkOutTime': checkOutTime,
-          'timestamp': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        };
-
-        // Add duration if available
-        if (duration != null) {
-          checkOutData['duration'] = duration;
-        }
-
-        // Store the check-out record
-        await FirebaseFirestore.instance
-            .collection('attendanceHistory')
-            .doc(date)
-            .collection('records')
-            .add(checkOutData);
-
-        print('Check-out record saved for $date');
+        attendanceData['checkOutTime'] = checkOutTime;
       }
+
+      // Add duration if provided
+      if (duration != null) {
+        attendanceData['studyHours'] = duration;
+      }
+
+      // Store the attendance record - use set with merge to update existing records
+      await _firestore
+          .collection('attendanceHistory')
+          .doc(date)
+          .collection('records')
+          .doc(recordId)
+          .set(attendanceData, SetOptions(merge: true));
+
+      print('[2025-06-29 10:10:32] devivekrt: Attendance history updated for $date');
     } catch (e) {
-      print("Error updating attendance history: $e");
-      // Rethrow to inform caller about the check-in/out constraint violation
+      print("[2025-06-29 10:10:32] devivekrt: Error updating attendance history: $e");
       throw e;
     }
   }
@@ -625,7 +795,7 @@ class _QRScannerScreenState extends State<QRScannerScreen>
       final todayString = _formatDateToString(today);
 
       // Check if we already updated the streak today
-      final streakRef = FirebaseDatabase.instance.ref().child(
+      final streakRef = _database.ref().child(
         "users/students/$_studentId/streakData",
       );
 
@@ -641,7 +811,7 @@ class _QRScannerScreenState extends State<QRScannerScreen>
 
       // Check if we already updated the streak today
       if (safeStreakData['lastUpdatedDate'] == todayString) {
-        print("Streak already updated today. Skipping.");
+        print("[2025-06-29 10:10:32] devivekrt: Streak already updated today. Skipping.");
         return;
       }
 
@@ -649,7 +819,7 @@ class _QRScannerScreenState extends State<QRScannerScreen>
       final yesterday = today.subtract(Duration(days: 1));
       final yesterdayString = _formatDateToString(yesterday);
 
-      final yesterdayRef = FirebaseFirestore.instance
+      final yesterdayRef = _firestore
           .collection('attendanceHistory')
           .doc(yesterdayString)
           .collection('records')
@@ -665,7 +835,7 @@ class _QRScannerScreenState extends State<QRScannerScreen>
       if (snapshot.docs.isNotEmpty) {
         // If checked in yesterday, increment streak
         newStreak = currentStreak + 1;
-        print("Checked in yesterday. New streak: $newStreak");
+        print("[2025-06-29 10:10:32] devivekrt: Checked in yesterday. New streak: $newStreak");
       } else {
         // If not checked in yesterday, check if this is the first check-in after multiple missed days
 
@@ -680,7 +850,7 @@ class _QRScannerScreenState extends State<QRScannerScreen>
           final date = now.subtract(Duration(days: i));
           final dateStr = dateFormat.format(date);
 
-          final attendanceRef = FirebaseFirestore.instance
+          final attendanceRef = _firestore
               .collection('attendanceHistory')
               .doc(dateStr)
               .collection('records')
@@ -705,21 +875,21 @@ class _QRScannerScreenState extends State<QRScannerScreen>
             // Just missed yesterday
             newStreak =
                 currentStreak; // Keep the streak (or subtract 1 if you prefer)
-            print("Missed only yesterday. Maintaining streak: $newStreak");
+            print("[2025-06-29 10:10:32] devivekrt: Missed only yesterday. Maintaining streak: $newStreak");
           } else {
             // Missed more than one day, reset streak
             newStreak = 1;
-            print("Missed multiple days. Resetting streak to 1");
+            print("[2025-06-29 10:10:32] devivekrt: Missed multiple days. Resetting streak to 1");
           }
         } else {
           // No previous check-ins found or too old, start new streak
           newStreak = 1;
-          print("No recent check-ins found. New streak: 1");
+          print("[2025-06-29 10:10:32] devivekrt: No recent check-ins found. New streak: 1");
         }
       }
 
       // Update streak in the main profile
-      await FirebaseDatabase.instance
+      await _database
           .ref()
           .child("users/students/$_studentId/currentStatus")
           .update({'streak': newStreak});
@@ -731,14 +901,14 @@ class _QRScannerScreenState extends State<QRScannerScreen>
         'updatedAt': ServerValue.timestamp,
       });
 
-      print("Streak updated successfully to $newStreak");
+      print("[2025-06-29 10:10:32] devivekrt: Streak updated successfully to $newStreak");
 
       // If streak reaches certain milestones, consider creating an achievement notification
       if (newStreak == 7 || newStreak == 30 || newStreak == 100) {
         _createStreakAchievementNotification(newStreak);
       }
     } catch (e) {
-      print("Error updating streak: $e");
+      print("[2025-06-29 10:10:32] devivekrt: Error updating streak: $e");
     }
   }
 
@@ -756,21 +926,21 @@ class _QRScannerScreenState extends State<QRScannerScreen>
       if (streak == 7) {
         title = "7-Day Streak!";
         message =
-            "Congratulations! You've maintained a 7-day study streak. Keep up the great work!";
+        "Congratulations! You've maintained a 7-day study streak. Keep up the great work!";
       } else if (streak == 30) {
         title = "30-Day Streak!";
         message =
-            "Amazing achievement! You've studied for 30 consecutive days!";
+        "Amazing achievement! You've studied for 30 consecutive days!";
       } else if (streak == 100) {
         title = "100-Day Streak!";
         message =
-            "Incredible dedication! 100 days of continuous studying is a remarkable achievement!";
+        "Incredible dedication! 100 days of continuous studying is a remarkable achievement!";
       } else {
         return; // No notification for other streak values
       }
 
       // Create notification in Firestore
-      await FirebaseFirestore.instance.collection('notifications').add({
+      await _firestore.collection('notifications').add({
         'userId': _studentId,
         'type': 'streak_achievement',
         'title': title,
@@ -781,31 +951,24 @@ class _QRScannerScreenState extends State<QRScannerScreen>
       });
 
       // Also add to realtime DB for faster access
-      await FirebaseDatabase.instance
+      await _database
           .ref("users/students/$_studentId/notifications")
           .push()
           .set({
-            'type': 'streak_achievement',
-            'title': title,
-            'streakDays': streak,
-            'read': false,
-            'createdAt': ServerValue.timestamp,
-          });
+        'type': 'streak_achievement',
+        'title': title,
+        'streakDays': streak,
+        'read': false,
+        'createdAt': ServerValue.timestamp,
+      });
+
+      print("[2025-06-29 10:10:32] devivekrt: Created streak achievement notification for $streak days");
     } catch (e) {
-      print("Error creating streak achievement notification: $e");
+      print("[2025-06-29 10:10:32] devivekrt: Error creating streak achievement notification: $e");
     }
   }
 
-  // Format duration from minutes to readable string
-  String _formatDuration(int minutes) {
-    if (minutes < 60) {
-      return '$minutes minutes';
-    } else {
-      final hours = minutes ~/ 60;
-      final remainingMinutes = minutes % 60;
-      return '$hours hour${hours > 1 ? 's' : ''} $remainingMinutes minute${remainingMinutes != 1 ? 's' : ''}';
-    }
-  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -930,7 +1093,70 @@ class _QRScannerScreenState extends State<QRScannerScreen>
                       ),
                     ),
 
-                  SizedBox(height: 40),
+                  // Display location status indicator
+                  if (!_isCheckedIn) // Only show when not checked in
+                    Padding(
+                      padding: const EdgeInsets.only(top: 16.0),
+                      child: Container(
+                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: _isLocationChecking ? Colors.grey[700] :
+                          _isWithinRange ? Colors.green.withOpacity(0.2) :
+                          Colors.red.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(40),
+                          border: Border.all(
+                            color: _isLocationChecking ? Colors.grey :
+                            _isWithinRange ? Colors.green : Colors.red,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _isLocationChecking ?
+                            SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                )
+                            ) :
+                            Icon(
+                              _isWithinRange ? Icons.location_on : Icons.location_off,
+                              color: _isWithinRange ? Colors.green : Colors.red,
+                              size: 16,
+                            ),
+                            SizedBox(width: 8),
+                            Text(
+                              _isLocationChecking ? "Checking location..." :
+                              _isWithinRange ? "Within library range" : "Not in library range",
+                              style: TextStyle(
+                                color: _isLocationChecking ? Colors.white :
+                                _isWithinRange ? Colors.green[800] : Colors.red[800],
+                                fontWeight: FontWeight.w500,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                  // Display location coordinates if available
+                  if (_locationService.isLocationAvailable && !_isCheckedIn)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: Text(
+                        'Last update: ${_locationService.lastUpdated != null ?
+                        DateFormat('HH:mm').format(_locationService.lastUpdated!) : "Unknown"}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ),
+
+                  SizedBox(height: 30),
 
                   // QR Scanner Frame
                   Container(
@@ -939,11 +1165,11 @@ class _QRScannerScreenState extends State<QRScannerScreen>
                     decoration: BoxDecoration(
                       border: Border.all(
                         color:
-                            _showSuccess
-                                ? Colors.green
-                                : _showError
-                                ? Colors.red
-                                : Color(0xff1940CC),
+                        _showSuccess
+                            ? Colors.green
+                            : _showError
+                            ? Colors.red
+                            : Color(0xff1940CC),
                         width: 3,
                       ),
                       borderRadius: BorderRadius.circular(20),
@@ -952,12 +1178,58 @@ class _QRScannerScreenState extends State<QRScannerScreen>
                       borderRadius: BorderRadius.circular(18),
                       child: Stack(
                         children: [
-                          // Camera view with live scanner
+                          // Conditional rendering based on state
                           if (!_showSuccess && !_showError)
-                            MobileScanner(
-                              controller: _scannerController,
-                              onDetect: _onDetect,
-                            ),
+                            if (_isCheckedIn || _isWithinRange)
+                              MobileScanner(
+                                controller: _scannerController,
+                                onDetect: _onDetect,
+                              )
+                            else
+                              Container(
+                                color: Colors.black87,
+                                child: Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.location_off,
+                                        color: Colors.red,
+                                        size: 60,
+                                      ),
+                                      SizedBox(height: 20),
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                                        child: Text(
+                                          "You must be within ${_locationCheckRadius.toStringAsFixed(0)} meters of ${_libraryName ?? 'the library'} to check in",
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                      SizedBox(height: 20),
+                                      ElevatedButton(
+                                        onPressed: () async {
+                                          // Get a fresh location update
+                                          await _locationService.requestSingleLocationUpdate();
+                                          await _checkLocationDistance();
+                                        },
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Color(0xff1940CC),
+                                          padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(30),
+                                          ),
+                                        ),
+                                        child: Text("Update Location"),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
 
                           // Show success screen
                           if (_showSuccess)
@@ -1075,14 +1347,14 @@ class _QRScannerScreenState extends State<QRScannerScreen>
                             ),
                           ),
 
-                          // Scan line animation (only when scanning)
-                          if (!_showSuccess && !_showError)
+                          // Scan line animation (only when scanning and in range)
+                          if (!_showSuccess && !_showError && (_isCheckedIn || _isWithinRange))
                             AnimatedBuilder(
                               animation: _animationController,
                               builder: (context, child) {
                                 return Positioned(
                                   top:
-                                      _animationController.value *
+                                  _animationController.value *
                                       (width * 0.8 - 2),
                                   left: 0,
                                   right: 0,
@@ -1128,8 +1400,8 @@ class _QRScannerScreenState extends State<QRScannerScreen>
                               ),
                             ),
 
-                          // Center helper text (only when scanning)
-                          if (!_isProcessingQR && !_showSuccess && !_showError)
+                          // Center helper text (only when scanning and in range)
+                          if (!_isProcessingQR && !_showSuccess && !_showError && (_isCheckedIn || _isWithinRange))
                             Center(
                               child: Text(
                                 "Position QR code in frame",
@@ -1154,19 +1426,61 @@ class _QRScannerScreenState extends State<QRScannerScreen>
 
                   SizedBox(height: 20),
 
-                  // Action label
+                  // Action label with location requirement note
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 40.0),
                     child: Text(
                       _isCheckedIn
                           ? "The system will automatically check you out when you scan the library QR code"
-                          : "The system will automatically check you in when you scan the library QR code",
+                          : "You must be within ${_locationCheckRadius.toStringAsFixed(0)} meters of the library to check in",
                       textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 14, color: Color(0xff1940CC)),
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: _isCheckedIn ? Color(0xff1940CC) :
+                        _isWithinRange ? Colors.green : Colors.red,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
 
-                  SizedBox(height: 30),
+                  // Update location button
+                  if (!_isCheckedIn)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 16.0),
+                      child: TextButton.icon(
+                        onPressed: () async {
+                          // Use the location service for update
+                          await _locationService.requestSingleLocationUpdate();
+                          await _checkLocationDistance();
+                        },
+                        icon: Icon(
+                          Icons.my_location,
+                          color: Color(0xff1940CC),
+                          size: 18,
+                        ),
+                        label: Text(
+                          "Update My Location",
+                          style: TextStyle(
+                            color: Color(0xff1940CC),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        style: TextButton.styleFrom(
+                          padding: EdgeInsets.symmetric(
+                            vertical: 12,
+                            horizontal: 20,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                            side: BorderSide(
+                              color: Color(0xff1940CC).withOpacity(0.5),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                  SizedBox(height: 20),
 
                   // Show check-in time if checked in
                   if (_checkInTime.isNotEmpty && _isCheckedIn)
@@ -1185,7 +1499,7 @@ class _QRScannerScreenState extends State<QRScannerScreen>
                           ),
                         ),
                         child: Text(
-                          "Checked in at: ${_formatTimeDisplay(_checkInTime)}",
+                          "Checked in at: $_checkInTime",
                           style: TextStyle(
                             color: Colors.green,
                             fontWeight: FontWeight.w500,
@@ -1247,7 +1561,7 @@ class _QRScannerScreenState extends State<QRScannerScreen>
       final dateTime = DateTime.parse(isoString);
       return DateFormat('hh:mm a').format(dateTime.toLocal());
     } catch (e) {
-      return "Unknown";
+      return isoString; // Return the original string if parsing fails
     }
   }
 

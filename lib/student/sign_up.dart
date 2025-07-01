@@ -82,7 +82,7 @@ class _SignUpState extends State<SignUp> {
           _isLoading = isLoading;
         });
       },
-      (bool success, int step) {
+      (bool success, int step)  {
         if (success) {
           // Navigate based on user type
           _navigateToProfileSetup();
@@ -92,7 +92,7 @@ class _SignUpState extends State<SignUp> {
   }
 
   // Function to navigate to the appropriate profile setup page
-  void _navigateToProfileSetup() {
+  Future<void> _navigateToProfileSetup() async {
     if (widget.userType == UserType.student) {
       // Navigate to student profile setup
       Navigator.pushReplacement(

@@ -679,7 +679,7 @@ class _LibrarianHomePageState extends State<LibrarianHomePage> {
       builder:
           (context) => AlertDialog(
             title: Text('Seat $seatId Details'),
-            content: Container(
+            content: SizedBox(
               width: double.maxFinite,
               child: Column(
                 mainAxisSize: MainAxisSize.min,

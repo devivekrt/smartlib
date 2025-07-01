@@ -7,24 +7,28 @@ import 'package:flutter/cupertino.dart';
 import 'package:gap/gap.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart'; // Added for formatting date
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:smartlib/student/student_card_page.dart';
 import 'package:smartlib/widgets/solid_button.dart';
 
 // For navigation to marketplace and detail page
 import '../data/string.dart';
+import '../function/student_function.dart';
+import '../function/student_location.dart';
 import '../models/library_model.dart';
 import 'library_detail_screen.dart';
 import 'library_market_place.dart';
 import 'notification_center.dart';
 
 class StudentHomePage extends StatefulWidget {
-  final VoidCallback onScanButtonPressed;
+  final VoidCallback onMarketPlace;
   final VoidCallback onBookSeatPressed;
 
   const StudentHomePage({
     Key? key,
-    required this.onScanButtonPressed,
+    required this.onMarketPlace,
     required this.onBookSeatPressed,
   }) : super(key: key);
 
@@ -45,8 +49,10 @@ class _StudentHomePageState extends State<StudentHomePage> {
   // Status data
   bool _isCheckedIn = false;
   String _currentSeatId = "";
+  String _currentStatus = "";
   String _currentLibraryId = "";
   String _currentLibraryName = "";
+  int _streak = 0; // Added missing property
   String _currentBookingId = ""; // Added missing property
   String _shiftId = ""; // Added missing property
   String _shiftStartTime = ""; // Added missing property
@@ -81,8 +87,9 @@ class _StudentHomePageState extends State<StudentHomePage> {
 
 
   // Get current user details and start data fetching
-  void _getCurrentUser() {
-    _userId = SmartLib.userId;
+  Future<void> _getCurrentUser() async {
+    _userId =  await AuthService.getUserId();
+    SmartLib.userId = _userId ?? '';
 
     // Once we have the user ID, fetch all data
     _fetchUserData().then((_) {
@@ -119,6 +126,8 @@ class _StudentHomePageState extends State<StudentHomePage> {
           _userData = userData;
           _userName = userData['fullName'] ?? "User";
           SmartLib.studentName = _userName;
+          SmartLib.email =userData['email'];
+          SmartLib.phone = userData['phone'];
         });
 
         print('User data loaded: $_userName');
@@ -157,10 +166,13 @@ class _StudentHomePageState extends State<StudentHomePage> {
         setState(() {
           // Set check-in status - keep this for reference but don't gate the other data on it
           _isCheckedIn = statusData['isCheckedIn'] == true;
+          _streak = statusData['streak'] ?? 0;
+
 
           // Basic library and seat info - show regardless of check-in status
           _currentLibraryId = statusData['currentLibraryId']?.toString() ?? '';
           _currentSeatId = statusData['currentSeatNo']?.toString() ?? '';
+          _currentStatus = statusData['currentStatus']?.toString() ?? '';
 
           // Get booking ID
           _currentBookingId = statusData['bookingId']?.toString() ?? '';
@@ -185,6 +197,7 @@ class _StudentHomePageState extends State<StudentHomePage> {
           // Get check-in/out times
           _checkInTime = statusData['checkInTime']?.toString();
           _checkOutTime = statusData['checkOutTime']?.toString();
+
         });
 
         // Fetch library name if we have library ID - do this regardless of check-in status
@@ -212,6 +225,7 @@ class _StudentHomePageState extends State<StudentHomePage> {
         // No status found - set default values but don't check check-in status
         setState(() {
           _isCheckedIn = false;
+          _streak = 0;
           _currentLibraryId = '';
           _currentLibraryName = '';
           _currentSeatId = '';
@@ -242,7 +256,9 @@ class _StudentHomePageState extends State<StudentHomePage> {
     }
   }
 
-  // Fetch all libraries and separate joined ones
+
+
+// Fetch all libraries and separate joined ones
   Future<void> _fetchNearbyLibraries() async {
     try {
       setState(() {
@@ -250,12 +266,61 @@ class _StudentHomePageState extends State<StudentHomePage> {
         _errorMessage = '';
       });
 
+      // Use the singleton location service to get student location
+      final _locationService = StudentLocationService();
+
+      // Initialize the location service if not already done
+      await _locationService.initialize();
+
+      double studentLat = 0.0;
+      double studentLon = 0.0;
+
+      // Check if location is available
+      if (_locationService.isLocationAvailable) {
+        // Get current location values
+        studentLat = _locationService.latitude!;
+        studentLon = _locationService.longitude!;
+
+        print('[2025-06-29 10:38:04] devivekrt: Using existing location: $studentLat, $studentLon');
+
+        // If location is stale, request an update
+        if (_locationService.isStale) {
+          print('[2025-06-29 10:38:04] devivekrt: Location is stale, requesting update');
+          final locationData = await _locationService.requestSingleLocationUpdate();
+
+          if (locationData != null) {
+            studentLat = locationData.latitude;
+            studentLon = locationData.longitude;
+
+            print('[2025-06-29 10:38:04] devivekrt: Updated to fresh location: $studentLat, $studentLon');
+          }
+        }
+      } else {
+        // If no location available, try to get a fresh one
+        print('[2025-06-29 10:38:04] devivekrt: No location available, requesting new location');
+        final locationData = await _locationService.requestSingleLocationUpdate();
+
+        if (locationData != null) {
+          studentLat = locationData.latitude;
+          studentLon = locationData.longitude;
+
+          print('[2025-06-29 10:38:04] devivekrt: Obtained new location: $studentLat, $studentLon');
+        } else {
+          print('[2025-06-29 10:38:04] devivekrt: Could not obtain location, using default coordinates');
+        }
+      }
+
+      // Update the class variables with the retrieved location
+      setState(() {
+        _studentLat = studentLat;
+        _studentLon = studentLon;
+      });
+
       // Get all active libraries from Firestore
       final querySnapshot = await _firestore
           .collection('libraries')
           .where('status', isEqualTo: 'active')
           .get();
-
 
       // Parse all libraries
       final tempAllLibraries = querySnapshot.docs.map((doc) {
@@ -281,11 +346,25 @@ class _StudentHomePageState extends State<StudentHomePage> {
             )
         );
 
-        // Calculate distance for each library
+        // Calculate distance for each library using the locationService directly
         final List<_LibraryWithDistance> nearbyLibraries = tempAllLibraries.map((lib) {
           final lat = double.tryParse(lib.locationLatitude ?? '') ?? 0.0;
           final lon = double.tryParse(lib.locationLongitude ?? '') ?? 0.0;
-          final dist = _calculateDistance(_studentLat, _studentLon, lat, lon);
+
+          // Use the service's distance calculation
+          double dist = 9999.0;
+          if (_locationService.isLocationAvailable) {
+            final calculatedDist = _locationService.calculateDistanceInKm(lat, lon);
+            if (calculatedDist != null) {
+              dist = calculatedDist;
+            }
+          }
+
+          // Add distance info to the library object for display
+          if (dist < 5) {
+            lib.location = '${dist.toStringAsFixed(1)} km away';
+          }
+
           return _LibraryWithDistance(library: lib, distanceKm: dist);
         }).toList()
           ..sort((a, b) => a.distanceKm.compareTo(b.distanceKm));
@@ -306,7 +385,21 @@ class _StudentHomePageState extends State<StudentHomePage> {
         final List<_LibraryWithDistance> nearbyLibraries = tempAllLibraries.map((lib) {
           final lat = double.tryParse(lib.locationLatitude ?? '') ?? 0.0;
           final lon = double.tryParse(lib.locationLongitude ?? '') ?? 0.0;
-          final dist = _calculateDistance(_studentLat, _studentLon, lat, lon);
+
+          // Use the service's distance calculation
+          double dist = 9999.0;
+          if (_locationService.isLocationAvailable) {
+            final calculatedDist = _locationService.calculateDistanceInKm(lat, lon);
+            if (calculatedDist != null) {
+              dist = calculatedDist;
+            }
+          }
+
+          // Add distance info to the library object for display
+          if (dist < 5) {
+            lib.location = '${dist.toStringAsFixed(1)} km away';
+          }
+
           return _LibraryWithDistance(library: lib, distanceKm: dist);
         }).toList()
           ..sort((a, b) => a.distanceKm.compareTo(b.distanceKm));
@@ -319,15 +412,13 @@ class _StudentHomePageState extends State<StudentHomePage> {
         });
       }
     } catch (e) {
-      print('Error fetching libraries: $e');
+      print('[2025-06-29 10:38:04] devivekrt: Error fetching libraries: $e');
       setState(() {
         _isLoadingLibraries = false;
         _errorMessage = 'Failed to load libraries. Please try again.';
       });
     }
   }
-
-
   // Fetch seat booking history from Realtime Database
   Future<void> _fetchSeatHistory() async {
     if (_userId == null) return;
@@ -436,19 +527,7 @@ class _StudentHomePageState extends State<StudentHomePage> {
     }
   }
 
-  // Haversine formula to calculate distance between two points (in km)
-  double _calculateDistance(double lat1, double lon1, double lat2, double lon2) {
-    const earthRadius = 6371.0;
-    final dLat = _deg2rad(lat2 - lat1);
-    final dLon = _deg2rad(lon2 - lon1);
-    final a = sin(dLat / 2) * sin(dLat / 2) +
-        cos(_deg2rad(lat1)) * cos(_deg2rad(lat2)) *
-            sin(dLon / 2) * sin(dLon / 2);
-    final c = 2 * atan2(sqrt(a), sqrt(1 - a));
-    return earthRadius * c;
-  }
 
-  double _deg2rad(double deg) => deg * (pi / 180);
 
   // Generates a color for each library based on its id or name
   Color _getColorForLibrary(LibraryModel library) {
@@ -661,7 +740,6 @@ class _StudentHomePageState extends State<StudentHomePage> {
               Container(
                 padding: EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Color(0xFF1E1E1E),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
@@ -1106,30 +1184,36 @@ class _StudentHomePageState extends State<StudentHomePage> {
               'dailyHours': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
             };
 
-            // Format data for display
+            // Format data for display - UPDATED to show hours
             final weeklyHours = (stats['weeklyHours'] as double).toStringAsFixed(0) + 'h';
+
+            // Convert longest day from minutes to hours
             final longestDayMins = stats['longestDay'] as int;
             final longestDayHours = (longestDayMins / 60).floor();
-            final longestDayMinutes = longestDayMins % 60;
-            final longestDayStr = longestDayHours > 0
-                ? '${longestDayHours}h ${longestDayMinutes}m'
-                : '$longestDayMinutes mins';
-            final streak = (stats['streak'] as int).toString();
+            final longestDayStr = '${longestDayHours}h';
 
-            // Prepare bar chart data
-            final List<dynamic> rawDailyHours = stats['dailyHours'] as List<dynamic>;
-            final List<double> dailyMinutes = List<double>.from(rawDailyHours);
+            final streak = (_streak).toString();
 
-            // Find maximum for normalization
-            double maxDailyMinutes = dailyMinutes.isEmpty ? 60.0 :
-            dailyMinutes.reduce((a, b) => max(a, b));
-            if (maxDailyMinutes < 10.0) maxDailyMinutes = 60.0; // Minimum display value
+            // Prepare bar chart data - CONVERT MINUTES TO HOURS
+            final List<dynamic> rawDailyMinutes = stats['dailyHours'] as List<dynamic>;
 
-            // Calculate normalized values and display hours
+            // Convert minutes to hours for display
+            final List<double> dailyHours = rawDailyMinutes
+                .map((minutes) => (minutes as double) / 60.0)
+                .toList();
+
+            // Find maximum hours for normalization
+            double maxDailyHours = dailyHours.isEmpty ? 1.0 :
+            dailyHours.reduce((a, b) => max(a, b));
+            if (maxDailyHours < 0.5) maxDailyHours = 1.0; // Minimum display value
+
+            // Calculate normalized values based on hours
             final List<double> normalizedValues =
-            dailyMinutes.map((minutes) => minutes / maxDailyMinutes).toList();
+            dailyHours.map((hours) => hours / max(maxDailyHours, 1.0)).toList(); // Ensure no division by zero
+
+            // Display hours rounded to nearest integer
             final List<int> displayHours =
-            dailyMinutes.map((minutes) => (minutes / 60).round()).toList();
+            dailyHours.map((hours) => hours.round()).toList();
 
             // Day labels
             final List<String> dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -1150,73 +1234,31 @@ class _StudentHomePageState extends State<StudentHomePage> {
               padding: EdgeInsets.all(20),
               child: Column(
                 children: [
-                  // Chart title and subtitle (optional)
-                  // Weekly hours chart - now with LayoutBuilder
-                  LayoutBuilder(
-                      builder: (context, constraints) {
-                        // Available width for chart
-                        final availableWidth = constraints.maxWidth;
-                        // Fixed bar width based on available width
-                        final barWidth = (availableWidth / 9); // 7 days + some padding
+                  // FIX: Replace LayoutBuilder with fixed-size container for bar chart
+                  Container(
+                    height: 120, // Fixed height for chart
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: List.generate(7, (index) {
+                        final hours = index < displayHours.length ?
+                        displayHours[index] : 0;
+                        final value = index < normalizedValues.length ?
+                        normalizedValues[index] : 0.0;
+                        final isHighlighted = index == today;
 
-                        return Container(
-                          height: 100, // Fixed height for chart area only
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceAround,
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: List.generate(7, (index) {
-                              final hours = index < displayHours.length ?
-                              displayHours[index] : 0;
-                              final value = index < normalizedValues.length ?
-                              normalizedValues[index] : 0.0;
-                              final isHighlighted = index == today;
+                        // FIXED: Safe bar height calculation with minimum value to avoid negative height
+                        final double barHeight = max(value * 60.0, 0.0); // Ensure non-negative height
 
-                              // Safe bar height calculation
-                              final double barHeight = value * 60.0;
-
-                              return Container(
-                                width: barWidth * 0.8, // Leave some space between bars
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  children: [
-                                    Container(
-                                      width: barWidth * 0.6,
-                                      height: barHeight,
-                                      decoration: BoxDecoration(
-                                        gradient: LinearGradient(
-                                          colors: isHighlighted
-                                              ? [Color(0xff1940CC), Color(0xff2D5BFF)]
-                                              : [Color(0xff1940CC).withOpacity(0.3), Color(0xff2D5BFF).withOpacity(0.3)],
-                                          begin: Alignment.bottomCenter,
-                                          end: Alignment.topCenter,
-                                        ),
-                                        borderRadius: BorderRadius.vertical(top: Radius.circular(4)),
-                                      ),
-                                    ),
-                                    SizedBox(height: 6),
-                                    Text(
-                                      dayLabels[index],
-                                      style: TextStyle(
-                                        color: isHighlighted ? Color(0xff1940CC) : textColor.withOpacity(0.7),
-                                        fontWeight: isHighlighted ? FontWeight.bold : FontWeight.normal,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                    Text(
-                                      hours > 0 ? "${hours}h" : "-",
-                                      style: TextStyle(
-                                        color: isHighlighted ? Color(0xff1940CC) : textColor.withOpacity(0.5),
-                                        fontWeight: isHighlighted ? FontWeight.bold : FontWeight.normal,
-                                        fontSize: 10,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }),
-                          ),
+                        return _buildBar(
+                            dayLabels[index],
+                            barHeight,
+                            hours,
+                            isHighlighted,
+                            textColor
                         );
-                      }
+                      }),
+                    ),
                   ),
 
                   Gap(15),
@@ -1259,44 +1301,49 @@ class _StudentHomePageState extends State<StudentHomePage> {
     );
   }
 
-// Improved stats item with proper spacing
-  Widget _buildStatsItem({
-    required String value,
-    required String label,
-    required IconData icon,
-    required Color color,
-    required Color textColor,
-  }) {
-    return Column(
-      children: [
-        Container(
-          padding: EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
-            shape: BoxShape.circle,
+// NEW: Extracted bar building method to avoid BoxConstraints errors
+  Widget _buildBar(String label, double barHeight, int hours, bool isHighlighted, Color textColor) {
+    // Ensure bar height is at least 2 for visibility (but never negative)
+    final safeBarHeight = max(barHeight, hours > 0 ? 2.0 : 0.0);
+
+    return Expanded(
+      child: Column(
+        mainAxisSize: MainAxisSize.min, // Use min size
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          Container(
+            width: 20, // Fixed width for bar
+            height: safeBarHeight,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: isHighlighted
+                    ? [Color(0xff1940CC), Color(0xff2D5BFF)]
+                    : [Color(0xff1940CC).withOpacity(0.3), Color(0xff2D5BFF).withOpacity(0.3)],
+                begin: Alignment.bottomCenter,
+                end: Alignment.topCenter,
+              ),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(4)),
+            ),
           ),
-          child: Icon(icon, color: color),
-        ),
-        SizedBox(height: 8),
-        Text(
-          value,
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 14,
-            color: textColor,
+          SizedBox(height: 6),
+          Text(
+            label,
+            style: TextStyle(
+              color: isHighlighted ? Color(0xff1940CC) : textColor.withOpacity(0.7),
+              fontWeight: isHighlighted ? FontWeight.bold : FontWeight.normal,
+              fontSize: 12,
+            ),
           ),
-          textAlign: TextAlign.center,
-        ),
-        SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(
-            color: textColor.withOpacity(0.7),
-            fontSize: 12,
+          Text(
+            hours > 0 ? "${hours}h" : "-",
+            style: TextStyle(
+              color: isHighlighted ? Color(0xff1940CC) : textColor.withOpacity(0.5),
+              fontWeight: isHighlighted ? FontWeight.bold : FontWeight.normal,
+              fontSize: 10,
+            ),
           ),
-          textAlign: TextAlign.center,
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -1306,7 +1353,7 @@ class _StudentHomePageState extends State<StudentHomePage> {
       // Default result
       final result = {
         'weeklyHours': 0.0, // Total hours studied this week
-        'longestDay': 0,    // Longest session in minutes
+        'longestDay': 0,    // Longest session in minutes - will be converted to hours
         'streak': 0,        // Consecutive days with activity
         'dailyHours': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], // Minutes per day of the week
       };
@@ -1413,9 +1460,9 @@ class _StudentHomePageState extends State<StudentHomePage> {
 
       // Populate result map
       result['weeklyHours'] = weeklyMinutes / 60; // Convert minutes to hours
-      result['longestDay'] = longestDaySoFar;
+      result['longestDay'] = longestDaySoFar; // Keep in minutes, will convert to hours in UI
       result['streak'] = streak;
-      result['dailyHours'] = dailyMinutes; // Store as minutes
+      result['dailyHours'] = dailyMinutes; // Keep as minutes for precise calculations
 
       return result;
 
@@ -1430,6 +1477,48 @@ class _StudentHomePageState extends State<StudentHomePage> {
       };
     }
   }
+
+// Improved stats item with proper spacing
+  Widget _buildStatsItem({
+    required String value,
+    required String label,
+    required IconData icon,
+    required Color color,
+    required Color textColor,
+  }) {
+    return Column(
+      children: [
+        Container(
+          padding: EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: color),
+        ),
+        SizedBox(height: 8),
+        Text(
+          value,
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+            color: textColor,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(
+            color: textColor.withOpacity(0.7),
+            fontSize: 12,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+
 
   // Modify the _buildNearbyLibrariesSection function
 
@@ -1469,12 +1558,7 @@ class _StudentHomePageState extends State<StudentHomePage> {
             ),
             TextButton(
               onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => LibraryMarketplace(isSignedUp: false),
-                  ),
-                );
+                widget.onMarketPlace();
               },
               child: Text(
                 "View All",

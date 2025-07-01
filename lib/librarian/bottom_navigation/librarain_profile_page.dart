@@ -186,7 +186,7 @@ class _LibrarianProfilePageState extends State<LibrarianProfilePage> {
                   _buildProfileInfoRow(
                     Icons.app_registration,
                     'Member Since',
-                    _formatDate(widget.librarianData['joinDate']),
+                    _formatDate(widget.librarianData['establishedDate']),
                   ),
 
                   _buildProfileInfoRow(

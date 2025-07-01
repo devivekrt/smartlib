@@ -7,14 +7,14 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:intl/intl.dart';
 import 'package:smartlib/data/string.dart';
 
-class BookingHistoryScreen extends StatefulWidget {
-  const BookingHistoryScreen({Key? key}) : super(key: key);
+class MyBookingsScreen extends StatefulWidget {
+  const MyBookingsScreen({Key? key}) : super(key: key);
 
   @override
-  _BookingHistoryScreenState createState() => _BookingHistoryScreenState();
+  _MyBookingsScreenState createState() => _MyBookingsScreenState();
 }
 
-class _BookingHistoryScreenState extends State<BookingHistoryScreen> with SingleTickerProviderStateMixin {
+class _MyBookingsScreenState extends State<MyBookingsScreen> with SingleTickerProviderStateMixin {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseDatabase _database = FirebaseDatabase.instance;
 
@@ -397,8 +397,7 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> with Single
         final libraryRef = _firestore.collection('libraries').doc(libraryId);
         batch.update(libraryRef, {
           'seats.$seatNo.shifts.$shiftId.status': 'available',
-          'seats.$seatNo.shifts.$shiftId.bookedBy': FieldValue.delete(),
-          'seats.$seatNo.shifts.$shiftId.bookingId': FieldValue.delete(),
+          'seats.$seatNo.shifts.$shiftId.bookedAt': FieldValue.delete(),
           'availableSeats': FieldValue.increment(1),
         });
       } else if (booking['shiftIds'] != null && booking['shiftIds'] is List) {
@@ -410,20 +409,14 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> with Single
         for (final shiftId in shiftIds) {
           batch.update(libraryRef, {
             'seats.$seatNo.shifts.$shiftId.status': 'available',
-            'seats.$seatNo.shifts.$shiftId.bookedBy': FieldValue.delete(),
-            'seats.$seatNo.shifts.$shiftId.bookingId': FieldValue.delete(),
+            'seats.$seatNo.shifts.$shiftId.bookedAt': FieldValue.delete(),
           });
         }
 
-        // Update available seats count
-        batch.update(libraryRef, {
-          'availableSeats': FieldValue.increment(1),
-        });
       }
 
       // 3. Execute the batch
       await batch.commit();
-
       // 4. Update user's current status if this was the active booking
       final studentId = SmartLib.userId ?? '';
       if (studentId.isNotEmpty) {
@@ -439,8 +432,8 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> with Single
             // This was the current active booking, clear the status
             await statusRef.update({
               'currentBookingId': null,
-              'bookingId': null,
               'currentStatus': 'none',
+              'subscriptionStatus': "cancelled",
             });
           }
         }

@@ -673,59 +673,8 @@ class _LibrarianNavigationPageState extends State<LibrarianNavigationPage> {
     });
   }
 
-  // Show seat details - FROM UPDATED CODE
-  void _showSeatDetails(String seatId, String studentId) {
-    final bookingsForSeat =
-    _todayBookings.where((booking) => booking['seatNo'] == seatId).toList();
 
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-        title: Text('Seat $seatId Details'),
-        content: Container(
-          width: double.maxFinite,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              bookingsForSeat.isEmpty
-                  ? const Text('No bookings for this seat')
-                  : Container(
-                height: 200,
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: bookingsForSeat.length,
-                  itemBuilder: (context, index) {
-                    final booking = bookingsForSeat[index];
-                    return ListTile(
-                      title: Text(
-                        'Shift: ${booking['shiftName']}',
-                      ),
-                      subtitle: Text(
-                        'Status: ${booking['status'] ?? 'Unknown'}',
-                      ),
-                      trailing: Text(
-                        'Student ID: ${booking['studentId'] ?? 'Unknown'}',
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
-
-// Confirm payment for a booking - UPDATED with student ID handling
+// Confirm payment for a booking - UPDATED with student ID handling and subscriber status update
   Future<void> _confirmPayment(String bookingId) async {
     try {
       // First get the booking details to extract student ID
@@ -747,12 +696,37 @@ class _LibrarianNavigationPageState extends State<LibrarianNavigationPage> {
         throw Exception('Student ID not found in booking');
       }
 
+      // Extract library ID from booking if available or use widget.library.id
+      final String libraryId = bookingData['libraryId'];
+
+      // Start a batch write to ensure consistency across multiple updates
+      final WriteBatch batch = _firestore.batch();
+
       // Update the booking in Firestore
-      await _firestore.collection('seatBookings').doc(bookingId).update({
+      batch.update(_firestore.collection('seatBookings').doc(bookingId), {
         'paymentStatus': 'paid',
         'status': 'confirmed',
         'paymentConfirmedAt': FieldValue.serverTimestamp(),
       });
+
+      // Update subscriber status in the library's subscribers collection
+      final subscribersRef = _firestore
+          .collection('libraries')
+          .doc(libraryId)
+          .collection('subscribers')
+          .doc(studentId);
+
+
+        // Update existing subscriber
+        batch.update(subscribersRef, {
+          'paymentStatus': 'paid',
+          'subscriptionStatus': 'active',
+          'lastUpdatedAt': FieldValue.serverTimestamp(),
+        });
+
+
+      // Commit all the updates atomically
+      await batch.commit();
 
       // Update current status in the Realtime Database with the correct student ID
       await FirebaseDatabase.instance
@@ -760,8 +734,7 @@ class _LibrarianNavigationPageState extends State<LibrarianNavigationPage> {
           .child("${SmartLib.constPath}/students/$studentId/currentStatus")
           .update({
         "paymentStatus": 'paid',
-        "paymentConfirmedAt": ServerValue.timestamp,
-        "paymentConfirmedBy": SmartLib.userId,
+        "subscriptionStatus": 'active',
       });
 
       // Show success message
@@ -769,6 +742,15 @@ class _LibrarianNavigationPageState extends State<LibrarianNavigationPage> {
         SnackBar(
           content: Text('Payment confirmed for Student ID: $studentId'),
           backgroundColor: Colors.green,
+          duration: const Duration(seconds: 3),
+          action: SnackBarAction(
+            label: 'View',
+            textColor: Colors.white,
+            onPressed: () {
+              // Optional: Navigate to student details page
+              // Navigator.push(context, MaterialPageRoute(builder: (context) => StudentDetailsPage(studentId: studentId)));
+            },
+          ),
         ),
       );
 
@@ -776,10 +758,17 @@ class _LibrarianNavigationPageState extends State<LibrarianNavigationPage> {
       _fetchBookingHistory();
       _fetchPendingPayments();
     } catch (e) {
+      print('Error confirming payment: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error confirming payment: ${e.toString()}'),
           backgroundColor: Colors.red,
+          duration: const Duration(seconds: 4),
+          action: SnackBarAction(
+            label: 'Retry',
+            textColor: Colors.white,
+            onPressed: () => _confirmPayment(bookingId),
+          ),
         ),
       );
     }
@@ -1119,7 +1108,6 @@ class _LibrarianNavigationPageState extends State<LibrarianNavigationPage> {
             isLoadingSeats: _isLoadingSeats,
             onDateChange: _changeDate,
             onShiftChange: _changeShift,
-            onShowSeatDetails: _showSeatDetails,
             getShiftName: getShiftName,
           ),
           LibrarianProfilePage(

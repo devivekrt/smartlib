@@ -114,7 +114,7 @@ class _LibrarianProfileSetupPageState extends State<LibrarianProfileSetupPage> {
 
         centerTitle: true,
         title: const Text(
-          'Librarian Profile',
+          'Librarian Profile Setup',
           style: TextStyle(color: Colors.white),
         ),
       ),

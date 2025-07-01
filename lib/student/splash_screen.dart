@@ -1,5 +1,5 @@
-// Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): 2025-06-25 09:38:27
-// Current User's Login: devivekrt
+// Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): 2025-06-29 15:10:55
+// Current User's Login: devivekrti
 
 import 'dart:async';
 import 'dart:math';
@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:smartlib/data/string.dart';
 import 'package:smartlib/student/select_page.dart';
 import 'package:smartlib/student/welcomescreen.dart';
+import '../function/review_service.dart';
 import '../function/student_function.dart';
 import '../librarian/bottom_navigation/librarain_navigation_page.dart';
 import 'main_tab_screen.dart';
@@ -36,20 +37,10 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   Timer? _navigationTimer;
   bool _isNavigating = false;
 
+
   @override
   void initState() {
     super.initState();
-
-    // System UI settings
-    SystemChrome.setSystemUIOverlayStyle(
-      SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.light,
-        systemNavigationBarColor: Colors.black,
-        systemNavigationBarIconBrightness: Brightness.light,
-      ),
-    );
-
     // Initialize animations
     _initializeAnimations();
 
@@ -125,6 +116,9 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
       // Check for existing user authentication
       String? userId = await AuthService.getUserId();
       String? userRole = await AuthService.getUserRole();
+      if (userId != null) {
+        SmartLib.userId = userId;
+      }
       print("User ID: $userId, User Role: $userRole");
 
       // If user is authenticated, verify they still exist in database
@@ -138,29 +132,32 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
 
           if (userSnapshot.snapshot.exists) {
             // User exists, navigate to appropriate home page
-              if (userRole == 'student') {
-                Navigator.pushReplacement(
-                  context,
-                  PageRouteBuilder(
-                    pageBuilder: (_, __, ___) => MainTabScreen(),
-                    transitionsBuilder: (_, animation, __, child) {
-                      return FadeTransition(opacity: animation, child: child);
-                    },
-                    transitionDuration: Duration(milliseconds: 500),
-                  ),
-                );
-              } else if (userRole == 'librarian') {
-                Navigator.pushReplacement(
-                  context,
-                  PageRouteBuilder(
-                    pageBuilder: (_, __, ___) => LibrarianNavigationPage(),
-                    transitionsBuilder: (_, animation, __, child) {
-                      return FadeTransition(opacity: animation, child: child);
-                    },
-                    transitionDuration: Duration(milliseconds: 500),
-                  ),
-                );
-              }
+            // Start exit animation
+            await _backgroundAnimationController.forward();
+
+            if (userRole == 'student') {
+              Navigator.pushReplacement(
+                context,
+                PageRouteBuilder(
+                  pageBuilder: (_, __, ___) => MainTabScreen(),
+                  transitionsBuilder: (_, animation, __, child) {
+                    return FadeTransition(opacity: animation, child: child);
+                  },
+                  transitionDuration: Duration(milliseconds: 500),
+                ),
+              );
+            } else if (userRole == 'librarian') {
+              Navigator.pushReplacement(
+                context,
+                PageRouteBuilder(
+                  pageBuilder: (_, __, ___) => LibrarianNavigationPage(),
+                  transitionsBuilder: (_, animation, __, child) {
+                    return FadeTransition(opacity: animation, child: child);
+                  },
+                  transitionDuration: Duration(milliseconds: 500),
+                ),
+              );
+            }
 
             return;
           }
@@ -170,34 +167,37 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
         }
       }
 
+      // Start exit animation
+      await _backgroundAnimationController.forward();
+
       // If we get here, user is not logged in or session is invalid
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          PageRouteBuilder(
-            pageBuilder: (_, __, ___) => WelcomeScreen(),
-            transitionsBuilder: (_, animation, __, child) {
-              return FadeTransition(opacity: animation, child: child);
-            },
-            transitionDuration: Duration(milliseconds: 500),
-          ),
-        );
-      }
+      Navigator.pushReplacement(
+        context,
+        PageRouteBuilder(
+          pageBuilder: (_, __, ___) => WelcomeScreen(),
+          transitionsBuilder: (_, animation, __, child) {
+            return FadeTransition(opacity: animation, child: child);
+          },
+          transitionDuration: Duration(milliseconds: 500),
+        ),
+      );
     } catch (e) {
       print("Error during login check: $e");
+
+      // Start exit animation
+      await _backgroundAnimationController.forward();
+
       // Navigate to selection page on any error
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          PageRouteBuilder(
-            pageBuilder: (_, __, ___) => WelcomeScreen(),
-            transitionsBuilder: (_, animation, __, child) {
-              return FadeTransition(opacity: animation, child: child);
-            },
-            transitionDuration: Duration(milliseconds: 500),
-          ),
-        );
-      }
+      Navigator.pushReplacement(
+        context,
+        PageRouteBuilder(
+          pageBuilder: (_, __, ___) => WelcomeScreen(),
+          transitionsBuilder: (_, animation, __, child) {
+            return FadeTransition(opacity: animation, child: child);
+          },
+          transitionDuration: Duration(milliseconds: 500),
+        ),
+      );
     }
   }
 
@@ -211,65 +211,39 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: Listenable.merge([
-        _logoAnimationController,
-        _backgroundAnimationController
-      ]),
-      builder: (context, child) {
-        return Scaffold(
-          backgroundColor: Colors.black,
-          body: Opacity(
-            opacity: _backgroundOpacityAnimation.value,
+    return Scaffold(
+      backgroundColor: Color(0xFF010E20), // Dark blue background
+      body: AnimatedBuilder(
+        animation: Listenable.merge([
+          _logoAnimationController,
+          _backgroundAnimationController,
+        ]),
+        builder: (context, child) {
+          return FadeTransition(
+            opacity: _backgroundOpacityAnimation,
             child: Center(
-              child: Transform.scale(
-                scale: _logoScaleAnimation.value,
-                child: Opacity(
-                  opacity: _logoOpacityAnimation.value,
-                  child: _buildLogo(),
+              child: FadeTransition(
+                opacity: _logoOpacityAnimation,
+                child: ScaleTransition(
+                  scale: _logoScaleAnimation,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // Logo image
+                      Image.asset(
+                        'assets/libtrack_logo.webp', // Make sure this is the path to your logo
+                        width: double.infinity,
+                      ),
+
+
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildLogo() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 140,
-          height: 140,
-          decoration: BoxDecoration(
-            color: Colors.black,
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: Color(0xFF00D3BB).withOpacity(0.3),
-                blurRadius: 30,
-                spreadRadius: 5,
-              ),
-            ],
-          ),
-          child: Center(
-            child: Text(
-              "LIB\nTRACK",
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 36,
-                fontWeight: FontWeight.w900,
-                color: Colors.white,
-                height: 0.9,
-                letterSpacing: 2,
-              ),
-            ),
-          ),
-        ),
-      ],
+          );
+        },
+      ),
     );
   }
 }
-

@@ -12,8 +12,8 @@ import 'package:smartlib/student/library_market_place.dart';
 import '../models/library_model.dart';
 import '../theme/theme.dart';
 import '../widgets/solid_button.dart';
-import 'bottom_navigation/librarain_navigation_page.dart';
-import 'library_submission_service.dart';
+import '../librarian/bottom_navigation/librarain_navigation_page.dart';
+import '../function/library_submission_service.dart';
 
 class UploadPictureScreen extends StatefulWidget {
   final LibraryModel libraryModel;
@@ -465,7 +465,7 @@ class _UploadPictureScreenState extends State<UploadPictureScreen> {
               20 + MediaQuery.of(context).viewInsets.bottom
           ),
           child: SolidButton(
-            text: "Complete Setup",
+            text: "Publish Library",
             width: double.infinity,
             height: 48,
             onPressed: _uploadLibraryData,

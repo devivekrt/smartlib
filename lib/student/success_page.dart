@@ -1,3 +1,6 @@
+// Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): 2025-06-29 06:40:05
+// Current User's Login: devivekrt
+
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
 import 'dart:async';
@@ -28,9 +31,13 @@ class ProgressSuccessPage extends StatefulWidget {
   // Custom accent color (for circle, buttons)
   final Color accentColor;
 
+  // Optional subtitle for additional context
+  final String? subtitle;
+
   const ProgressSuccessPage({
     super.key,
     this.title = 'Processing',
+    this.subtitle,
     this.loadingMessage = 'Please wait...',
     this.completedMessage = 'All Set!',
     required this.taskFunction,
@@ -44,10 +51,15 @@ class ProgressSuccessPage extends StatefulWidget {
   _ProgressSuccessPageState createState() => _ProgressSuccessPageState();
 }
 
-class _ProgressSuccessPageState extends State<ProgressSuccessPage> with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
+class _ProgressSuccessPageState extends State<ProgressSuccessPage> with TickerProviderStateMixin {
+  late AnimationController _circleController;
+  late AnimationController _checkController;
+  late AnimationController _scaleController;
+  late AnimationController _loadingController;
+
   late Animation<double> _circleAnimation;
   late Animation<double> _checkAnimation;
+  late Animation<double> _scaleAnimation;
 
   bool _animationCompleted = false;
   bool _taskCompleted = false;
@@ -62,29 +74,65 @@ class _ProgressSuccessPageState extends State<ProgressSuccessPage> with SingleTi
 
     _statusText = widget.loadingMessage;
 
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 1500),
+    // Controller for the circular loading animation
+    _loadingController = AnimationController(
+      duration: const Duration(seconds: 2),
+      vsync: this,
+    )..repeat();
+
+    // Controller for the outer circle animation
+    _circleController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+
+    // Controller for the checkmark animation
+    _checkController = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+
+    // Controller for the scale effect
+    _scaleController = AnimationController(
+      duration: const Duration(milliseconds: 300),
       vsync: this,
     );
 
     // Animation for the outer circle
     _circleAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
-        parent: _controller,
-        curve: Interval(0.0, 0.7, curve: Curves.easeOut),
+        parent: _circleController,
+        curve: Curves.easeOutQuart,
       ),
     );
 
     // Animation for the checkmark
     _checkAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
-        parent: _controller,
-        curve: Interval(0.7, 1.0, curve: Curves.elasticOut),
+        parent: _checkController,
+        curve: Curves.easeOutCubic,
       ),
     );
 
-    // Add a listener to set the animation completed flag
-    _controller.addStatusListener((status) {
+    // Animation for scaling effect
+    _scaleAnimation = TweenSequence([
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 0.0, end: 1.2),
+        weight: 40,
+      ),
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 1.2, end: 1.0),
+        weight: 60,
+      ),
+    ]).animate(
+      CurvedAnimation(
+        parent: _scaleController,
+        curve: Curves.easeOutBack,
+      ),
+    );
+
+    // Add listeners for animation completion
+    _checkController.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
         setState(() {
           _animationCompleted = true;
@@ -114,8 +162,15 @@ class _ProgressSuccessPageState extends State<ProgressSuccessPage> with SingleTi
       });
 
       if (result) {
-        // Start the success animation
-        _controller.forward();
+        // Dispose of the loading animation
+        _loadingController.stop();
+
+        // Play the success animations in sequence
+        _scaleController.forward();
+        await Future.delayed(const Duration(milliseconds: 150));
+        _circleController.forward();
+        await Future.delayed(const Duration(milliseconds: 400));
+        _checkController.forward();
 
         // If animation already completed, schedule continue
         if (_animationCompleted) {
@@ -130,6 +185,12 @@ class _ProgressSuccessPageState extends State<ProgressSuccessPage> with SingleTi
         _errorText = e.toString();
         _statusText = 'Error occurred';
       });
+
+      // Stop the loading animation
+      _loadingController.stop();
+
+      // Scale up the error icon
+      _scaleController.forward();
     }
   }
 
@@ -141,110 +202,200 @@ class _ProgressSuccessPageState extends State<ProgressSuccessPage> with SingleTi
 
   @override
   void dispose() {
-    _controller.dispose();
+    _circleController.dispose();
+    _checkController.dispose();
+    _scaleController.dispose();
+    _loadingController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    double width = MediaQuery.of(context).size.width;
+    final Size size = MediaQuery.of(context).size;
+    final double width = size.width;
+    final double animationSize = math.min(width * 0.5, 200);
 
     return Scaffold(
       backgroundColor: widget.backgroundColor,
       body: SafeArea(
-        child: Center(
+        child: Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                widget.backgroundColor,
+                Color.lerp(widget.backgroundColor, Colors.black, 0.3)!,
+              ],
+            ),
+          ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(
-                widget.title,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
+              // Title with optional subtitle
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                child: Column(
+                  children: [
+                    Text(
+                      widget.title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    if (widget.subtitle != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        widget.subtitle!,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.7),
+                          fontSize: 16,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ],
                 ),
               ),
-              const SizedBox(height: 40),
+              const SizedBox(height: 60),
 
               // Animated Icon or Spinner
               if (_isProcessing)
               // Show spinner while processing
-                SizedBox(
-                  width: width/3,
-                  height: width/3,
-                  child: CircularProgressIndicator(
-                    color: widget.accentColor,
-                    strokeWidth: 8,
-                  ),
+                AnimatedBuilder(
+                  animation: _loadingController,
+                  builder: (_, __) {
+                    return SizedBox(
+                      width: animationSize,
+                      height: animationSize,
+                      child: CustomPaint(
+                        painter: LoadingCirclePainter(
+                          progress: _loadingController.value,
+                          color: widget.accentColor,
+                        ),
+                      ),
+                    );
+                  },
                 )
               else if (_taskSuccess)
               // Show success animation
                 AnimatedBuilder(
-                  animation: _controller,
+                  animation: Listenable.merge([_circleAnimation, _checkAnimation, _scaleAnimation]),
                   builder: (context, child) {
-                    return SizedBox(
-                      width: width/2,
-                      height: width/2,
-                      child: CustomPaint(
-                        painter: SuccessIconPainter(
-                          circleProgress: _circleAnimation.value,
-                          checkProgress: _checkAnimation.value,
-                          accentColor: widget.accentColor,
+                    return Transform.scale(
+                      scale: _scaleAnimation.value,
+                      child: SizedBox(
+                        width: animationSize,
+                        height: animationSize,
+                        child: CustomPaint(
+                          painter: SuccessIconPainter(
+                            circleProgress: _circleAnimation.value,
+                            checkProgress: _checkAnimation.value,
+                            accentColor: widget.accentColor,
+                          ),
+                          size: Size(animationSize, animationSize),
                         ),
                       ),
                     );
                   },
                 )
               else
-              // Show error icon
-                Icon(
-                  Icons.error_outline,
-                  size: width/3,
-                  color: Colors.red,
+              // Show error icon with animation
+                AnimatedBuilder(
+                  animation: _scaleAnimation,
+                  builder: (context, child) {
+                    return Transform.scale(
+                      scale: _scaleAnimation.value,
+                      child: Container(
+                        width: animationSize,
+                        height: animationSize,
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade800,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.error_outline,
+                          size: animationSize * 0.6,
+                          color: Colors.white,
+                        ),
+                      ),
+                    );
+                  },
                 ),
 
-              const SizedBox(height: 40),
+              const SizedBox(height: 48),
 
-              // Status Text
-              Text(
-                _statusText,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
+              // Status Text with animated appearance
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                child: Text(
+                  _statusText,
+                  key: ValueKey(_statusText),
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: _taskCompleted ? FontWeight.bold : FontWeight.normal,
+                    letterSpacing: 0.5,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
-                textAlign: TextAlign.center,
               ),
 
               // Error details if any
               if (_errorText != null)
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Text(
-                    _errorText!,
-                    style: const TextStyle(
-                      color: Colors.red,
-                      fontSize: 14,
+                AnimatedOpacity(
+                  opacity: _errorText != null ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 300),
+                  child: Container(
+                    margin: const EdgeInsets.only(top: 16),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                    textAlign: TextAlign.center,
+                    child: Text(
+                      _errorText!,
+                      style: const TextStyle(
+                        color: Colors.red,
+                        fontSize: 14,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
                   ),
                 ),
 
-              const SizedBox(height: 40),
+              const SizedBox(height: 60),
 
               // Continue button - only shows when task is completed
               if (_taskCompleted)
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _taskSuccess ? widget.accentColor : Colors.red,
-                    padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
+                AnimatedOpacity(
+                  opacity: _animationCompleted ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 500),
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _taskSuccess ? widget.accentColor : Colors.red.shade700,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 16),
+                      elevation: 8,
+                      shadowColor: _taskSuccess ? widget.accentColor.withOpacity(0.6) : Colors.red.withOpacity(0.6),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
                     ),
-                  ),
-                  onPressed: widget.onComplete,
-                  child: Text(
-                    _taskSuccess ? 'Continue' : 'Try Again',
-                    style: const TextStyle(fontSize: 16, color: Colors.white),
+                    onPressed: _animationCompleted ? widget.onComplete : null,
+                    child: Text(
+                      _taskSuccess ? 'Continue' : 'Try Again',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
                   ),
                 ),
             ],
@@ -252,6 +403,53 @@ class _ProgressSuccessPageState extends State<ProgressSuccessPage> with SingleTi
         ),
       ),
     );
+  }
+}
+
+class LoadingCirclePainter extends CustomPainter {
+  final double progress;
+  final Color color;
+
+  LoadingCirclePainter({
+    required this.progress,
+    required this.color,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = math.min(size.width, size.height) * 0.4;
+
+    // Draw track (background circle)
+    final trackPaint = Paint()
+      ..color = color.withOpacity(0.2)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 10;
+
+    canvas.drawCircle(center, radius, trackPaint);
+
+    // Draw loading arc
+    final loadingPaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 10
+      ..strokeCap = StrokeCap.round;
+
+    const startAngle = -math.pi / 2; // Start from top
+    final sweepAngle = 2 * math.pi * 0.7; // Sweep 70% of the circle
+
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      startAngle + (2 * math.pi * progress),
+      sweepAngle,
+      false,
+      loadingPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant LoadingCirclePainter oldDelegate) {
+    return oldDelegate.progress != progress || oldDelegate.color != color;
   }
 }
 
@@ -269,20 +467,25 @@ class SuccessIconPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    final radius = math.min(size.width, size.height) / 2;
-    final outerCircleRadius = radius;
-    final whiteCircleRadius = radius - 30;
-    final colorFilledRadius = radius - 35;
+    final radius = math.min(size.width, size.height) * 0.4;
+
+    // Draw the complete background circle first
+    final backgroundPaint = Paint()
+      ..color = accentColor.withOpacity(0.1)
+      ..style = PaintingStyle.fill;
+
+    canvas.drawCircle(center, radius, backgroundPaint);
 
     // Draw outer circle
     final outerCirclePaint = Paint()
       ..color = accentColor
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5;
+      ..strokeWidth = 12
+      ..strokeCap = StrokeCap.round;
 
     if (circleProgress > 0) {
       canvas.drawArc(
-        Rect.fromCircle(center: center, radius: outerCircleRadius),
+        Rect.fromCircle(center: center, radius: radius),
         -math.pi / 2,
         2 * math.pi * circleProgress,
         false,
@@ -290,23 +493,14 @@ class SuccessIconPainter extends CustomPainter {
       );
     }
 
-    // Draw inner white circle
-    if (circleProgress >= 0.9) {
+    // Draw the filled circle background
+    if (circleProgress >= 0.95) {
       final innerCirclePaint = Paint()
-        ..color = Colors.white
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 20.0;
-
-      canvas.drawCircle(center, whiteCircleRadius, innerCirclePaint);
-    }
-
-    // Draw blue filled background for the check
-    if (circleProgress >= 1.0) {
-      final backgroundPaint = Paint()
         ..color = accentColor
         ..style = PaintingStyle.fill;
 
-      canvas.drawCircle(center, colorFilledRadius, backgroundPaint);
+      final innerRadius = radius * 0.85;
+      canvas.drawCircle(center, innerRadius, innerCirclePaint);
     }
 
     // Draw the checkmark
@@ -314,28 +508,31 @@ class SuccessIconPainter extends CustomPainter {
       final checkPaint = Paint()
         ..color = Colors.white
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 20.0
+        ..strokeWidth = 14
         ..strokeJoin = StrokeJoin.round
         ..strokeCap = StrokeCap.round;
 
-      final startPoint = Offset(center.dx - radius * 0.3, center.dy + radius * 0.1);
-      final middlePoint = Offset(center.dx, center.dy + radius * 0.3);
-      final endPoint = Offset(center.dx + radius * 0.4, center.dy - radius * 0.3);
+      final checkSize = radius * 0.6;
+      final startPoint = Offset(center.dx - checkSize * 0.5, center.dy + checkSize * 0.1);
+      final middlePoint = Offset(center.dx - checkSize * 0.1, center.dy + checkSize * 0.5);
+      final endPoint = Offset(center.dx + checkSize * 0.5, center.dy - checkSize * 0.5);
 
       final path = Path();
 
       if (checkProgress <= 0.5) {
-        final progress = checkProgress * 2;
+        // Animate first part of the check (to the middle point)
+        final progress = checkProgress * 2; // Scale to 0-1 for this segment
         final currentX = startPoint.dx + (middlePoint.dx - startPoint.dx) * progress;
         final currentY = startPoint.dy + (middlePoint.dy - startPoint.dy) * progress;
 
         path.moveTo(startPoint.dx, startPoint.dy);
         path.lineTo(currentX, currentY);
       } else {
+        // Animate second part of the check (middle to end)
         path.moveTo(startPoint.dx, startPoint.dy);
         path.lineTo(middlePoint.dx, middlePoint.dy);
 
-        final progress = (checkProgress - 0.5) * 2;
+        final progress = (checkProgress - 0.5) * 2; // Scale to 0-1 for this segment
         final currentX = middlePoint.dx + (endPoint.dx - middlePoint.dx) * progress;
         final currentY = middlePoint.dy + (endPoint.dy - middlePoint.dy) * progress;
 
@@ -343,6 +540,27 @@ class SuccessIconPainter extends CustomPainter {
       }
 
       canvas.drawPath(path, checkPaint);
+    }
+
+    // Add subtle glint effect when complete
+    if (circleProgress >= 1.0 && checkProgress >= 1.0) {
+      final highlightPaint = Paint()
+        ..shader = RadialGradient(
+          colors: [
+            Colors.white.withOpacity(0.4),
+            Colors.white.withOpacity(0.0),
+          ],
+          stops: const [0.0, 1.0],
+        ).createShader(Rect.fromCircle(
+          center: Offset(center.dx - radius * 0.3, center.dy - radius * 0.3),
+          radius: radius * 0.8,
+        ));
+
+      canvas.drawCircle(
+        Offset(center.dx - radius * 0.3, center.dy - radius * 0.3),
+        radius * 0.3,
+        highlightPaint,
+      );
     }
   }
 

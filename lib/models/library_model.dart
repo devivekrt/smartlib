@@ -26,10 +26,12 @@ class LibraryModel {
   List<String> utilities;
   Map<String, dynamic> shifts;
   int? lowFee;
+  Map<String, dynamic>? openingHours;
   String status;
   double rating;
   int reviews;
   int students;
+  bool? canReview;
 
   LibraryModel({
     this.id,
@@ -49,53 +51,24 @@ class LibraryModel {
     this.libraryImage,
     this.libraryImageUrl,
     Map<String, dynamic>? shifts,
-    List<ShiftModel>? shiftsList,
     this.lowFee,
     this.libraryType,
+    this.openingHours,
     this.tag,
     this.utilities = const [],
     this.status = 'active',
+    this.canReview ,
     this.rating = 0.0,
     this.reviews = 0,
     this.students = 0,
-  }) : shifts = shifts ??
-      (shiftsList != null ? _convertShiftsListToMap(shiftsList) : _getDefaultShifts()) {
-    // Calculate and set the lowest fee if not provided
-    if (this.lowFee == null) {
-      this.lowFee = calculateLowestFee();
+  }) : shifts = shifts ?? _getDefaultShifts() {
+    // Ensure shifts is always a Map
+    if (shifts is! Map<String, dynamic>) {
+      this.shifts = _getDefaultShifts();
     }
   }
 
-  // Helper method to convert a list of ShiftModel to a map
-  static Map<String, dynamic> _convertShiftsListToMap(List<ShiftModel> shiftsList) {
-    final Map<String, dynamic> shiftsMap = {};
 
-    for (int i = 0; i < shiftsList.length; i++) {
-      final shift = shiftsList[i];
-      final String shiftKey;
-
-      if (shift.shiftName != null && shift.shiftName!.isNotEmpty) {
-        shiftKey = shift.shiftName!.toLowerCase().replaceAll(' ', '_');
-      } else {
-        switch (i) {
-          case 0: shiftKey = 'morning'; break;
-          case 1: shiftKey = 'afternoon'; break;
-          case 2: shiftKey = 'evening'; break;
-          case 3: shiftKey = 'night'; break;
-          default: shiftKey = 'shift_${i+1}';
-        }
-      }
-
-      shiftsMap[shiftKey] = {
-        'shiftName': shift.shiftName ?? 'Shift ${i+1}',
-        'shiftStartTime': shift.startTime ?? '00:00',
-        'shiftEndTime': shift.endTime ?? '00:00',
-        'shiftFee': shift.fee ?? 0,
-      };
-    }
-
-    return shiftsMap;
-  }
 
   // Default shifts if none provided
   static Map<String, dynamic> _getDefaultShifts() {
@@ -211,7 +184,7 @@ class LibraryModel {
               case 1: shiftKey = 'afternoon'; break;
               case 2: shiftKey = 'evening'; break;
               case 3: shiftKey = 'night'; break;
-              default: shiftKey = 'shift_${i+1}';
+              default: shiftKey = shift['shiftName'].toString().toLowerCase();
             }
           }
 
@@ -237,6 +210,7 @@ class LibraryModel {
       }
     }
 
+
     return LibraryModel(
       id: docId ?? map['id'],
       tag: map['tag'],
@@ -256,12 +230,14 @@ class LibraryModel {
       libraryImageUrl: map['libraryImageUrl'],
       libraryType: map['libraryType'] ?? 'self_study',
       shifts: shiftsMap,
+      openingHours: map['openingHours'],
       lowFee: map['lowFee'],
       utilities: map['utilities'] != null ? List<String>.from(map['utilities']) : [],
       status: map['status'] ?? 'active',
       rating: ratingValue,
       reviews: map['reviews'] ?? 0,
       students: map['students'] ?? 0,
+      canReview: false,
     );
   }
 }
@@ -283,6 +259,30 @@ class ShiftModel {
     };
   }
 }
+class OpeningHours {
+  String openTime;
+  String closeTime;
+
+  OpeningHours({
+    required this.openTime,
+    required this.closeTime,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'openTime': openTime,
+      'closeTime': closeTime,
+    };
+  }
+  factory OpeningHours.fromMap(Map<String, dynamic> map) {
+
+    return OpeningHours(
+      openTime: map['openTime'] ?? '00:00',
+      closeTime: map['closeTime'] ?? '00:00',
+    );
+  }
+
+}
 
 class LibraryUtility {
   final String id;
@@ -303,7 +303,7 @@ class LibraryUtilities {
     LibraryUtility(id: 'wifi', name: 'WiFi', icon: Icons.wifi),
     LibraryUtility(id: 'cctv', name: 'CCTV', icon: Icons.videocam),
     LibraryUtility(id: 'water', name: 'RO Water', icon: Icons.water_drop),
-    LibraryUtility(id: 'ac', name: 'Air Conditioning', icon: Icons.ac_unit),
+    LibraryUtility(id: 'ac', name: 'AC', icon: Icons.ac_unit),
     LibraryUtility(id: 'printer', name: 'Printer', icon: Icons.print),
     LibraryUtility(id: 'scanner', name: 'Scanner', icon: Icons.scanner),
     LibraryUtility(id: 'locker', name: 'Lockers', icon: Icons.lock),

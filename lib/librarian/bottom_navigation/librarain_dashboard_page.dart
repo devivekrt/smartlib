@@ -3,12 +3,12 @@ import 'package:smartlib/data/string.dart';
 import 'package:smartlib/models/library_model.dart';
 import 'package:intl/intl.dart';
 import 'package:gap/gap.dart';
-import 'dart:math' show min;
+import 'dart:math' show max, min;
 
 import 'package:smartlib/library/library_edit_screen.dart';
 
 import '../../theme/theme.dart';
-import '../library_checkin_management.dart';
+import '../library_checkin_classroom.dart';
 import '../library_qrcode_gen.dart';
 import '../notification_send.dart';
 
@@ -284,6 +284,7 @@ class LibrarianDashboardPage extends StatelessWidget {
                   ),
                 ),
 
+
                 // Quick Actions
                 const Gap(20),
                 Card(
@@ -306,24 +307,26 @@ class LibrarianDashboardPage extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        Wrap(
+                          alignment: WrapAlignment.start,
+                          spacing: 16, // horizontal spacing between items
+                          runSpacing: 16, // vertical spacing between lines
                           children: [
                             _actionButton(
                               context,
                               "Run Ads",
                               Icons.add_chart_sharp,
-                              () {
+                                  () {
                                 // Navigate to Run Ads tab
                               },
+                              width: _getActionButtonWidth(context),
                             ),
                             _actionButton(
                               context,
-                              "Manage Seats",
+                              "Classroom Check-in",
                               Icons.event_seat,
-                              () {
+                                  () {
                                 // Navigate to seat management tab
-                                // Example of how to navigate to the library check-in management page
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
@@ -334,54 +337,48 @@ class LibrarianDashboardPage extends StatelessWidget {
                                   ),
                                 );
                               },
+                              width: _getActionButtonWidth(context),
                             ),
                             _actionButton(
                               context,
                               "QR Code",
                               Icons.qr_code_2_rounded,
-                              () {
-                                // Navigate to payments tab
+                                  () {
+                                // Navigate to QR code generator
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder:
-                                        (context) => LibraryQRGeneratorScreen(
-                                          libraryId: currentLibrary['id'],
-                                          libraryName:
-                                              currentLibrary['libraryName'],
-                                          libraryAddress:
-                                          _formatAddress() ??
-                                              'Address not available',
-                                          librarianId:
-                                              SmartLib.userId,
-                                        ),
+                                    builder: (context) => LibraryQRGeneratorScreen(
+                                      libraryId: currentLibrary['id'],
+                                      libraryName: currentLibrary['libraryName'],
+                                      libraryAddress: _formatAddress() ?? 'Address not available',
+                                      librarianId: SmartLib.userId,
+                                    ),
                                   ),
                                 );
                               },
-
+                              width: _getActionButtonWidth(context),
                             ),
-
-                          ],
-                        ),
-                        Row(
-                          children: [
                             _actionButton(
                               context,
                               "Notifications",
                               Icons.notification_add,
                                   () {
-                                // Navigate to seat management tab
-                                // Example of how to navigate to the library check-in management page
+                                // Navigate to notifications screen
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (context) => LibrarianNotificationScreen(librarianId: SmartLib.userId, libraryId: currentLibrary['id'],)
+                                    builder: (context) => LibrarianNotificationScreen(
+                                      librarianId: SmartLib.userId,
+                                      libraryId: currentLibrary['id'],
+                                    ),
                                   ),
                                 );
                               },
+                              width: _getActionButtonWidth(context),
                             ),
                           ],
-                        )
+                        ),
                       ],
                     ),
                   ),
@@ -569,6 +566,33 @@ class LibrarianDashboardPage extends StatelessWidget {
     }
     return null;
   }
+  double _getActionButtonWidth(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+
+    // Calculate how many buttons should fit in a row based on screen width
+    int buttonsPerRow = 4; // Default for large screens
+
+    if (screenWidth < 600) {
+      // Small screens (phones) - 2 buttons per row
+      buttonsPerRow = 2;
+    } else if (screenWidth < 900) {
+      // Medium screens (small tablets) - 3 buttons per row
+      buttonsPerRow = 3;
+    }
+
+    // Calculate the width considering padding and spacing
+    // Total card padding (16 on each side) + spacing between items
+    double totalHorizontalPadding = 32 + ((buttonsPerRow - 1) * 16);
+
+    // The available width for buttons
+    double availableWidth = screenWidth - totalHorizontalPadding;
+
+    // Width per button
+    double buttonWidth = availableWidth / buttonsPerRow;
+
+    // Set a minimum width to prevent too small buttons
+    return max(70, buttonWidth);
+  }
 
   // Build custom occupancy chart with enhanced UI
   Widget _buildOccupancyChart() {
@@ -673,11 +697,13 @@ class LibrarianDashboardPage extends StatelessWidget {
     String label,
     IconData icon,
     VoidCallback onTap,
+  {required double width,}
   ) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
-      child: Padding(
+      child: Container(
+        width: width,
         padding: const EdgeInsets.all(8.0),
         child: Column(
           children: [

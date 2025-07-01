@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 
 import '../data/string.dart';
@@ -28,13 +29,13 @@ class LibrarySubmissionService {
       libraryModel.students = 0;
 
       // Upload image to Firebase Storage if provided
-      /* if (imageFile != null) {
+       if (imageFile != null) {
         final fileName = 'library_images/${libraryId}_${DateTime.now().millisecondsSinceEpoch}.jpg';
         final storageRef = FirebaseStorage.instance.ref().child(fileName);
         await storageRef.putFile(imageFile);
         final downloadUrl = await storageRef.getDownloadURL();
         libraryModel.libraryImageUrl = downloadUrl;
-      } */
+      }
 
       // Prepare library data
       final libraryData = libraryModel.toMap();
@@ -46,13 +47,8 @@ class LibrarySubmissionService {
 
       // Process shifts for seat generation - modified to handle Map format
       final Map<String, dynamic> shiftsMap;
-      if (libraryModel.shifts is Map<String, dynamic>) {
-        // If shifts is already a map, use it directly
-        shiftsMap = Map<String, dynamic>.from(libraryModel.shifts);
-      } else {
-        // If it's not a map (for backward compatibility), convert it
-        shiftsMap = _convertShiftsToMap(libraryModel.shifts);
-      }
+      // If shifts is already a map, use it directly
+      shiftsMap = Map<String, dynamic>.from(libraryModel.shifts);
 
       // Generate and save seats
       await _generateSeats(libraryId, libraryModel.totalSeats ?? 0, shiftsMap);
@@ -61,6 +57,11 @@ class LibrarySubmissionService {
       await _database.ref('${SmartLib.constPath}/librarians/${libraryModel.librarianId}/managedLibraries')
           .child(libraryId)
           .set(true);
+
+      await _database.ref('${SmartLib.constPath}/librarians/${libraryModel.librarianId}')
+          .update({
+        'libraryAdded': true,
+      });
 
       return libraryId;
     } catch (e) {
@@ -168,7 +169,9 @@ class LibrarySubmissionService {
           .doc(libraryId)
           .update({'seats': seatsData});
 
-      print("Successfully generated and saved $totalSeats seats for library $libraryId");
+       SnackBar(
+        content: Text("Successfully generated and saved $totalSeats seats for library $libraryId"),
+      );
     } catch (e) {
       print("Error generating seats: $e");
       rethrow;

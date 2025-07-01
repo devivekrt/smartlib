@@ -4,12 +4,16 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:gap/gap.dart';
+import 'package:intl/intl.dart';
 import 'package:smartlib/theme/theme.dart';
 import 'package:smartlib/models/library_model.dart';
 import 'package:smartlib/student/seat_booking_screen.dart';
 import 'package:smartlib/widgets/solid_button.dart';
 
 import '../data/string.dart';
+import '../function/review_service.dart';
+import '../models/review_model.dart';
+import 'my_bookings_screen.dart';
 import 'main_tab_screen.dart';
 
 class LibraryDetailScreen extends StatefulWidget {
@@ -50,9 +54,9 @@ class _LibraryDetailScreenState extends State<LibraryDetailScreen> {
   // Check if user is already checked into a library
   Future<void> _checkCurrentStatus() async {
     try {
-      final statusRef = FirebaseDatabase.instance
-          .ref()
-          .child("users/students/${SmartLib.userId}/currentStatus");
+      final statusRef = FirebaseDatabase.instance.ref().child(
+        "users/students/${SmartLib.userId}/currentStatus",
+      );
 
       final snapshot = await statusRef.get();
 
@@ -65,7 +69,9 @@ class _LibraryDetailScreenState extends State<LibraryDetailScreen> {
         });
 
         // If checked into another library, get the library name
-        if (_isBookedLibrary && _currentLibraryId != null && _currentLibraryId != widget.library.id) {
+        if (_isBookedLibrary &&
+            _currentLibraryId != null &&
+            _currentLibraryId != widget.library.id) {
           await _fetchCurrentLibraryName();
         }
       }
@@ -79,10 +85,11 @@ class _LibraryDetailScreenState extends State<LibraryDetailScreen> {
     try {
       if (_currentLibraryId == null) return;
 
-      final libraryDoc = await FirebaseFirestore.instance
-          .collection('libraries')
-          .doc(_currentLibraryId)
-          .get();
+      final libraryDoc =
+          await FirebaseFirestore.instance
+              .collection('libraries')
+              .doc(_currentLibraryId)
+              .get();
 
       if (libraryDoc.exists) {
         setState(() {
@@ -97,12 +104,12 @@ class _LibraryDetailScreenState extends State<LibraryDetailScreen> {
   Future<void> _checkFavorite() async {
     try {
       final snapshot =
-      await FirebaseDatabase.instance
-          .ref(
-        '${SmartLib.constPath}/students/${SmartLib.userId}/favorites',
-      )
-          .child(widget.library.id!)
-          .get();
+          await FirebaseDatabase.instance
+              .ref(
+                '${SmartLib.constPath}/students/${SmartLib.userId}/favorites',
+              )
+              .child(widget.library.id!)
+              .get();
 
       setState(() {
         _favorite = snapshot.exists;
@@ -143,7 +150,9 @@ class _LibraryDetailScreenState extends State<LibraryDetailScreen> {
 
     try {
       // Check if student is already checked into another library
-      if (_isBookedLibrary && _currentLibraryId != null && _currentLibraryId != widget.library.id) {
+      if (_isBookedLibrary &&
+          _currentLibraryId != null &&
+          _currentLibraryId != widget.library.id) {
         setState(() {
           _isLoading = false;
         });
@@ -151,69 +160,68 @@ class _LibraryDetailScreenState extends State<LibraryDetailScreen> {
         // Show an alert dialog
         showDialog(
           context: context,
-          builder: (context) => AlertDialog(
-            backgroundColor: DarkColor.cardColor,
-            title: Text(
-              'Already Checked In',
-              style: TextStyle(color: Colors.white),
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'You are currently checked in to ${_currentLibraryName ?? "another library"}.',
-                  style: TextStyle(color: Colors.white70),
+          builder:
+              (context) => AlertDialog(
+                backgroundColor: DarkColor.cardColor,
+                title: Text(
+                  'Already Checked In',
+                  style: TextStyle(color: Colors.white),
                 ),
-                SizedBox(height: 8),
-                Text(
-                  'You need to check out from your current library before booking a seat at ${widget.library.libraryName}.',
-                  style: TextStyle(color: Colors.white70),
-                ),
-                SizedBox(height: 16),
-                Container(
-                  padding: EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.amber.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.amber.withOpacity(0.3)),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.info_outline, color: Colors.amber),
-                      SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'You can check out by scanning the QR code at your current library or using the My Bookings screen.',
-                          style: TextStyle(color: Colors.amber),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'You are currently checked in to ${_currentLibraryName ?? "another library"}.',
+                      style: TextStyle(color: Colors.white70),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'You need to check out from your current library before booking a seat at ${widget.library.libraryName}.',
+                      style: TextStyle(color: Colors.white70),
+                    ),
+                    SizedBox(height: 16),
+                    Container(
+                      padding: EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Colors.amber.withOpacity(0.3),
                         ),
                       ),
-                    ],
-                  ),
-                )
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text('Cancel', style: TextStyle(color: Colors.grey)),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.amber,
-                  foregroundColor: Colors.black,
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline, color: Colors.amber),
+                          SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'You can check out by scanning the QR code at your current library or using the My Bookings screen.',
+                              style: TextStyle(color: Colors.amber),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                onPressed: () {
-                  // Here you could navigate to the bookings page
-                  Navigator.pop(context);
-
-                  // Optional: Navigate to My Bookings page here
-                  // Navigator.push(context, MaterialPageRoute(builder: (context) => MyBookingsScreen()));
-                },
-                child: Text('My Bookings'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text('Cancel', style: TextStyle(color: Colors.grey)),
+                  ),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.amber,
+                      foregroundColor: Colors.black,
+                    ),
+                    onPressed: () {
+                       Navigator.push(context, MaterialPageRoute(builder: (context) => MyBookingsScreen()));
+                    },
+                    child: Text('My Bookings'),
+                  ),
+                ],
               ),
-            ],
-          ),
         );
 
         return;
@@ -228,10 +236,11 @@ class _LibraryDetailScreenState extends State<LibraryDetailScreen> {
       final result = await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => SeatBookingScreen(
-            library: widget.library,
-            userId: SmartLib.userId,
-          ),
+          builder:
+              (context) => SeatBookingScreen(
+                library: widget.library,
+                userId: SmartLib.userId,
+              ),
         ),
       );
 
@@ -255,7 +264,7 @@ class _LibraryDetailScreenState extends State<LibraryDetailScreen> {
             Navigator.pushAndRemoveUntil(
               context,
               MaterialPageRoute(builder: (context) => MainTabScreen()),
-                  (route) => false,
+              (route) => false,
             );
           }
         }
@@ -291,7 +300,9 @@ class _LibraryDetailScreenState extends State<LibraryDetailScreen> {
 
     // Check if library.shifts is a map
     if (widget.library.shifts is Map) {
-      Map<String, dynamic> shiftsMap = Map<String, dynamic>.from(widget.library.shifts);
+      Map<String, dynamic> shiftsMap = Map<String, dynamic>.from(
+        widget.library.shifts,
+      );
 
       shiftsMap.forEach((key, value) {
         if (value is Map) {
@@ -302,7 +313,10 @@ class _LibraryDetailScreenState extends State<LibraryDetailScreen> {
             shiftName: shiftData['shiftName'],
             startTime: shiftData['shiftStartTime'],
             endTime: shiftData['shiftEndTime'],
-            fee: shiftData['shiftFee'] is int ? shiftData['shiftFee'] : int.tryParse(shiftData['shiftFee'].toString()),
+            fee:
+                shiftData['shiftFee'] is int
+                    ? shiftData['shiftFee']
+                    : int.tryParse(shiftData['shiftFee'].toString()),
           );
 
           shiftsList.add(shift);
@@ -349,7 +363,7 @@ class _LibraryDetailScreenState extends State<LibraryDetailScreen> {
     }
 
     final String shortLocation =
-    location.length > 70 ? location.substring(0, 70) + '...' : location;
+        location.length > 70 ? location.substring(0, 70) + '...' : location;
 
     return SafeArea(
       child: Scaffold(
@@ -373,150 +387,170 @@ class _LibraryDetailScreenState extends State<LibraryDetailScreen> {
                 ],
               ),
               child:
-              widget.isSignedUp
-                  ? Row(
-                children: [
-                  // Skip button (goes to home)
-                  Expanded(
-                    child: Container(
-                      height: 56,
-                      margin: EdgeInsets.only(right: 10),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(28),
-                        border: Border.all(color: Colors.orange, width: 2),
-                        color: Colors.transparent,
-                      ),
-                      child: MaterialButton(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(28),
-                        ),
-                        onPressed: () {
-                          Navigator.pushAndRemoveUntil(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => MainTabScreen(),
-                            ),
-                                (route) => false,
-                          );
-                        },
-                        child: Text(
-                          "Skip",
-                          style: TextStyle(
-                            color: Colors.orange,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  // Book button (join and go to home)
-                  Expanded(
-                    child: Container(
-                      height: 56,
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(28),
-                        gradient: LinearGradient(
-                          colors:
-                          _isJoined || (_isBookedLibrary && !isCurrentLibrary)
-                              ? [Colors.grey, Colors.grey.shade700]
-                              : [Colors.orange, Colors.deepOrange],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                      ),
-                      child: MaterialButton(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(28),
-                        ),
-                        onPressed:
-                        _isJoined || _isLoading || (_isBookedLibrary && !isCurrentLibrary)
-                            ? null
-                            : () async {
-                          await _joinLibrary();
-                          if (_isJoined) {
-                            // After successful join, navigate to home
-                            Navigator.pushAndRemoveUntil(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => SeatBookingScreen(library: library, userId: SmartLib.userId),
+                  widget.isSignedUp
+                      ? Row(
+                        children: [
+                          // Skip button (goes to home)
+                          Expanded(
+                            child: Container(
+                              height: 56,
+                              margin: EdgeInsets.only(right: 10),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(28),
+                                border: Border.all(
+                                  color: Colors.orange,
+                                  width: 2,
+                                ),
+                                color: Colors.transparent,
                               ),
-                                  (route) => false,
-                            );
-                          }
-                        },
-                        child:
-                        _isLoading
-                            ? SizedBox(
-                          height: 24,
-                          width: 24,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 3,
+                              child: MaterialButton(
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(28),
+                                ),
+                                onPressed: () {
+                                  Navigator.pushAndRemoveUntil(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => MainTabScreen(),
+                                    ),
+                                    (route) => false,
+                                  );
+                                },
+                                child: Text(
+                                  "Skip",
+                                  style: TextStyle(
+                                    color: Colors.orange,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
-                        )
-                            : Text(
-                          _isJoined
-                              ? "Already Booked"
-                              : (_isBookedLibrary && !isCurrentLibrary)
-                              ? "Check Out First"
-                              : "Book Now",
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
+                          // Book button (join and go to home)
+                          Expanded(
+                            child: Container(
+                              height: 56,
+                              width: double.infinity,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(28),
+                                gradient: LinearGradient(
+                                  colors:
+                                      _isJoined ||
+                                              (_isBookedLibrary &&
+                                                  !isCurrentLibrary)
+                                          ? [Colors.grey, Colors.grey.shade700]
+                                          : [Colors.orange, Colors.deepOrange],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                              ),
+                              child: MaterialButton(
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(28),
+                                ),
+                                onPressed:
+                                    _isJoined ||
+                                            _isLoading ||
+                                            (_isBookedLibrary &&
+                                                !isCurrentLibrary)
+                                        ? null
+                                        : () async {
+                                          await _joinLibrary();
+                                          if (_isJoined) {
+                                            // After successful join, navigate to home
+                                            Navigator.pushAndRemoveUntil(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder:
+                                                    (context) =>
+                                                        SeatBookingScreen(
+                                                          library: library,
+                                                          userId:
+                                                              SmartLib.userId,
+                                                        ),
+                                              ),
+                                              (route) => false,
+                                            );
+                                          }
+                                        },
+                                child:
+                                    _isLoading
+                                        ? SizedBox(
+                                          height: 24,
+                                          width: 24,
+                                          child: CircularProgressIndicator(
+                                            color: Colors.white,
+                                            strokeWidth: 3,
+                                          ),
+                                        )
+                                        : Text(
+                                          _isJoined
+                                              ? "Already Booked"
+                                              : (_isBookedLibrary &&
+                                                  !isCurrentLibrary)
+                                              ? "Check Out First"
+                                              : "Book Now",
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      )
+                      : Container(
+                        height: 56,
+                        width: width,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(28),
+                          gradient: LinearGradient(
+                            colors:
+                                _isJoined ||
+                                        (_isBookedLibrary && !isCurrentLibrary)
+                                    ? [Colors.grey, Colors.grey.shade700]
+                                    : [Colors.orange, Colors.deepOrange],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
                           ),
                         ),
+                        child: MaterialButton(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(28),
+                          ),
+                          onPressed:
+                              _isJoined ||
+                                      _isLoading ||
+                                      (_isBookedLibrary && !isCurrentLibrary)
+                                  ? null
+                                  : _joinLibrary,
+                          child:
+                              _isLoading
+                                  ? SizedBox(
+                                    height: 24,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 3,
+                                    ),
+                                  )
+                                  : Text(
+                                    _isJoined
+                                        ? "Already Joined"
+                                        : (_isBookedLibrary &&
+                                            !isCurrentLibrary)
+                                        ? "Check Out First"
+                                        : "Book a Seat",
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                        ),
                       ),
-                    ),
-                  ),
-                ],
-              )
-                  : Container(
-                height: 56,
-                width: width,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(28),
-                  gradient: LinearGradient(
-                    colors:
-                    _isJoined || (_isBookedLibrary && !isCurrentLibrary)
-                        ? [Colors.grey, Colors.grey.shade700]
-                        : [Colors.orange, Colors.deepOrange],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                ),
-                child: MaterialButton(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(28),
-                  ),
-                  onPressed: _isJoined || _isLoading || (_isBookedLibrary && !isCurrentLibrary)
-                      ? null
-                      : _joinLibrary,
-                  child:
-                  _isLoading
-                      ? SizedBox(
-                    height: 24,
-                    child: CircularProgressIndicator(
-                      color: Colors.white,
-                      strokeWidth: 3,
-                    ),
-                  )
-                      : Text(
-                    _isJoined
-                        ? "Already Joined"
-                        : (_isBookedLibrary && !isCurrentLibrary)
-                        ? "Check Out First"
-                        : "Book a Seat",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                ),
-              ),
             ),
           ],
         ),
@@ -539,29 +573,29 @@ class _LibraryDetailScreenState extends State<LibraryDetailScreen> {
                         width: double.infinity,
                         decoration: BoxDecoration(
                           image:
-                          library.libraryImageUrl != null
-                              ? DecorationImage(
-                            image: NetworkImage(
-                              library.libraryImageUrl!,
-                            ),
-                            fit: BoxFit.cover,
-                          )
-                              : null,
+                              library.libraryImageUrl != null
+                                  ? DecorationImage(
+                                    image: NetworkImage(
+                                      library.libraryImageUrl!,
+                                    ),
+                                    fit: BoxFit.cover,
+                                  )
+                                  : null,
                           color:
-                          library.libraryImageUrl == null
-                              ? Colors.grey[800]
-                              : null,
+                              library.libraryImageUrl == null
+                                  ? Colors.grey[800]
+                                  : null,
                         ),
                         child:
-                        library.libraryImageUrl == null
-                            ? Center(
-                          child: Icon(
-                            Icons.apartment,
-                            size: 80,
-                            color: Colors.white54,
-                          ),
-                        )
-                            : null,
+                            library.libraryImageUrl == null
+                                ? Center(
+                                  child: Icon(
+                                    Icons.apartment,
+                                    size: 80,
+                                    color: Colors.white54,
+                                  ),
+                                )
+                                : null,
                       ),
 
                       // Gradient overlay for contrast
@@ -631,20 +665,7 @@ class _LibraryDetailScreenState extends State<LibraryDetailScreen> {
                                 ),
                                 padding: EdgeInsets.zero,
                                 onPressed: () {
-                                  if (widget.isSignedUp) {
-                                    Navigator.pushAndRemoveUntil(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) => MainTabScreen(),
-                                      ),
-                                          (route) => false,
-                                    );
-                                  } else {
-                                    Navigator.pop(
-                                      context,
-                                      _isJoined != widget.isJoined,
-                                    );
-                                  }
+                                  Navigator.of(context).pop();
                                 },
                               ),
                             ),
@@ -700,11 +721,12 @@ class _LibraryDetailScreenState extends State<LibraryDetailScreen> {
                                   vertical: 6,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: (_isBookedLibrary && isCurrentLibrary)
-                                      ? Colors.green.withOpacity(0.9)
-                                      : (_isJoined
-                                      ? Colors.blue.withOpacity(0.9)
-                                      : Colors.amber.withOpacity(0.9)),
+                                  color:
+                                      (_isBookedLibrary && isCurrentLibrary)
+                                          ? Colors.green.withOpacity(0.9)
+                                          : (_isJoined
+                                              ? Colors.blue.withOpacity(0.9)
+                                              : Colors.amber.withOpacity(0.9)),
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Row(
@@ -714,8 +736,8 @@ class _LibraryDetailScreenState extends State<LibraryDetailScreen> {
                                       (_isBookedLibrary && isCurrentLibrary)
                                           ? Icons.check_circle
                                           : (_isJoined
-                                          ? Icons.check_circle
-                                          : Icons.warning_amber),
+                                              ? Icons.check_circle
+                                              : Icons.warning_amber),
                                       color: Colors.white,
                                       size: 16,
                                     ),
@@ -724,8 +746,8 @@ class _LibraryDetailScreenState extends State<LibraryDetailScreen> {
                                       (_isBookedLibrary && isCurrentLibrary)
                                           ? 'Currently Joined In'
                                           : (_isJoined
-                                          ? 'Already Joined'
-                                          : 'Checked In Elsewhere'),
+                                              ? 'Already Joined'
+                                              : 'Checked In Elsewhere'),
                                       style: TextStyle(
                                         color: Colors.white,
                                         fontWeight: FontWeight.bold,
@@ -863,14 +885,20 @@ class _LibraryDetailScreenState extends State<LibraryDetailScreen> {
                             decoration: BoxDecoration(
                               color: Colors.amber.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.amber.withOpacity(0.3)),
+                              border: Border.all(
+                                color: Colors.amber.withOpacity(0.3),
+                              ),
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Row(
                                   children: [
-                                    Icon(Icons.warning_amber_rounded, color: Colors.amber, size: 20),
+                                    Icon(
+                                      Icons.warning_amber_rounded,
+                                      color: Colors.amber,
+                                      size: 20,
+                                    ),
                                     SizedBox(width: 8),
                                     Text(
                                       "Already Joined In",
@@ -885,7 +913,7 @@ class _LibraryDetailScreenState extends State<LibraryDetailScreen> {
                                 SizedBox(height: 8),
                                 Text(
                                   "You're currently checked into ${_currentLibraryName ?? "another library"}. "
-                                      "You must check out from there before booking a seat here.",
+                                  "You must check out from there before booking a seat here.",
                                   style: TextStyle(color: Colors.white),
                                 ),
                               ],
@@ -963,28 +991,28 @@ class _LibraryDetailScreenState extends State<LibraryDetailScreen> {
                                   ),
                                   text: _isExpanded ? location : shortLocation,
                                   children:
-                                  location.length > 70
-                                      ? [
-                                    TextSpan(
-                                      text:
-                                      _isExpanded
-                                          ? "  Show less"
-                                          : "  Show more",
-                                      style: TextStyle(
-                                        color: libraryColor,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                      recognizer:
-                                      TapGestureRecognizer()
-                                        ..onTap = () {
-                                          setState(() {
-                                            _isExpanded =
-                                            !_isExpanded;
-                                          });
-                                        },
-                                    ),
-                                  ]
-                                      : [],
+                                      location.length > 70
+                                          ? [
+                                            TextSpan(
+                                              text:
+                                                  _isExpanded
+                                                      ? "  Show less"
+                                                      : "  Show more",
+                                              style: TextStyle(
+                                                color: libraryColor,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                              recognizer:
+                                                  TapGestureRecognizer()
+                                                    ..onTap = () {
+                                                      setState(() {
+                                                        _isExpanded =
+                                                            !_isExpanded;
+                                                      });
+                                                    },
+                                            ),
+                                          ]
+                                          : [],
                                 ),
                               ),
 
@@ -1054,7 +1082,7 @@ class _LibraryDetailScreenState extends State<LibraryDetailScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 ...library.rules.map(
-                                      (rule) => _buildRuleItem(rule),
+                                  (rule) => _buildRuleItem(rule),
                                 ),
                               ],
                             ),
@@ -1070,9 +1098,10 @@ class _LibraryDetailScreenState extends State<LibraryDetailScreen> {
                           ),
                           Gap(12),
                           ...shiftsList.map(
-                                (shift) => _buildShiftItem(shift, libraryColor),
+                            (shift) => _buildShiftItem(shift, libraryColor),
                           ),
                           SizedBox(height: 24),
+                          _buildReviewsTab(),
                         ],
                       ],
                     ),
@@ -1085,7 +1114,6 @@ class _LibraryDetailScreenState extends State<LibraryDetailScreen> {
       ),
     );
   }
-
 
   // Helper method to get a consistent location string
   String getLocation() {
@@ -1127,6 +1155,166 @@ class _LibraryDetailScreenState extends State<LibraryDetailScreen> {
         ),
       ],
     );
+  }
+
+  // In library_detail_screen.dart, add to your tabs
+  Widget _buildReviewsTab() {
+    final reviewService = ReviewService();
+
+    return FutureBuilder<List<ReviewModel>>(
+      future: reviewService.getLibraryReviews(widget.library.id!),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator());
+        }
+
+        if (snapshot.hasError) {
+          return Center(
+            child: Text(
+              'Failed to load reviews',
+              style: TextStyle(color: Colors.grey),
+            ),
+          );
+        }
+
+        final reviews = snapshot.data ?? [];
+        if (reviews.isEmpty) {
+          return Center(
+            child: Text('No reviews yet', style: TextStyle(color: Colors.grey)),
+          );
+        }
+
+        return ListView.builder(
+          padding: EdgeInsets.all(16),
+          itemCount: reviews.length,
+          itemBuilder: (context, index) {
+            final review = reviews[index];
+            return _buildReviewCard(review);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildReviewCard(ReviewModel review) {
+    final dateFormatted = DateFormat('MMM d, yyyy').format(review.createdAt);
+
+    return Container(
+      margin: EdgeInsets.only(bottom: 16),
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: DarkColor.cardColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade800),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              // User avatar
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade800,
+                  shape: BoxShape.circle,
+                  image:
+                      review.userPhotoUrl != null
+                          ? DecorationImage(
+                            image: NetworkImage(review.userPhotoUrl!),
+                            fit: BoxFit.cover,
+                          )
+                          : null,
+                ),
+                child:
+                    review.userPhotoUrl == null
+                        ? Center(
+                          child: Text(
+                            review.userName.isNotEmpty
+                                ? review.userName[0].toUpperCase()
+                                : 'U',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        )
+                        : null,
+              ),
+              SizedBox(width: 12),
+
+              // User name and date
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      review.userName,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    Text(
+                      dateFormatted,
+                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Rating
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _getRatingColor(review.rating).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: _getRatingColor(review.rating).withOpacity(0.5),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.star,
+                      color: _getRatingColor(review.rating),
+                      size: 16,
+                    ),
+                    SizedBox(width: 4),
+                    Text(
+                      review.rating.toString(),
+                      style: TextStyle(
+                        color: _getRatingColor(review.rating),
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+
+          // Review feedback
+          if (review.feedback.isNotEmpty) ...[
+            SizedBox(height: 12),
+            Text(
+              review.feedback,
+              style: TextStyle(color: Colors.white.withOpacity(0.9)),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Color _getRatingColor(double rating) {
+    if (rating <= 0) return Colors.grey;
+    if (rating <= 1) return Colors.red;
+    if (rating <= 2) return Colors.orange;
+    if (rating <= 3) return Colors.amber;
+    if (rating <= 4) return Colors.lightGreen;
+    return Colors.green;
   }
 
   // Helper method to build info cards
@@ -1489,10 +1677,5 @@ class ShiftModel {
   final String? endTime;
   final int? fee;
 
-  ShiftModel({
-    this.shiftName,
-    this.startTime,
-    this.endTime,
-    this.fee,
-  });
+  ShiftModel({this.shiftName, this.startTime, this.endTime, this.fee});
 }

@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
+import 'package:geocoding/geocoding.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:smartlib/theme/theme.dart';
 import 'package:smartlib/student/library_market_place.dart';
 import 'package:smartlib/student/success_page.dart';
@@ -48,6 +50,7 @@ class _StudentProfileSetupPageState extends State<StudentProfileSetupPage> {
   // Location data
   String? _latitude;
   String? _longitude;
+  String? _address;
 
   // For continuous location updates
   StreamSubscription<Position>? _positionSubscription;
@@ -100,76 +103,113 @@ class _StudentProfileSetupPageState extends State<StudentProfileSetupPage> {
     }
   }
 
-  // Call this after user presses location permission button
-  Future<void> _startLocationTracking() async {
+  // Get current location (more accurate than just tracking)
+  Future<void> _getCurrentLocation() async {
     setState(() => _isLoading = true);
-    // Check and request location permissions
-    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      await Geolocator.openLocationSettings();
-      setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enable location services.')),
-      );
-      return;
-    }
 
-    LocationPermission permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        setState(() => _isLoading = false);
+    try {
+      // Check if location services are enabled
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Location permissions are denied.')),
+          const SnackBar(content: Text('Please enable location services')),
         );
+        setState(() => _isLoading = false);
         return;
       }
-    }
-    if (permission == LocationPermission.deniedForever) {
-      await Geolocator.openAppSettings();
-      setState(() => _isLoading = false);
+
+      // Check permissions
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Location permissions are denied')),
+          );
+          setState(() => _isLoading = false);
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Location permissions are permanently denied')),
+        );
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      // Get precise location with high accuracy
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.best,
+        timeLimit: const Duration(seconds: 20),
+      );
+
+      // Try to get address from coordinates
+      String? address;
+      try {
+        List<Placemark> placemarks = await placemarkFromCoordinates(
+            position.latitude, position.longitude
+        );
+
+        if (placemarks.isNotEmpty) {
+          Placemark place = placemarks.first;
+          List<String> addressParts = [];
+
+          if (place.street != null && place.street!.isNotEmpty)
+            addressParts.add(place.street!);
+          if (place.locality != null && place.locality!.isNotEmpty)
+            addressParts.add(place.locality!);
+          if (place.postalCode != null && place.postalCode!.isNotEmpty)
+            addressParts.add(place.postalCode!);
+
+          address = addressParts.join(", ");
+        }
+      } catch (e) {
+        print('Error getting address: $e');
+      }
+
+      // Update state with new location data
+      setState(() {
+        _latitude = position.latitude.toString();
+        _longitude = position.longitude.toString();
+        _address = address;
+        _locationPermissionGranted = true;
+        _isLoading = false;
+      });
+
+      // Save to shared preferences for persistence
+      _saveLocationToPreferences();
+
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Location permissions are permanently denied.'),
+        SnackBar(
+          content: Text('Location updated successfully!'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
         ),
       );
-      return;
+    } catch (e) {
+      print('Error getting location: $e');
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to get location: ${e.toString()}')),
+      );
     }
+  }
 
-    // Get initial position and set as current
-    Position position = await Geolocator.getCurrentPosition(
-      desiredAccuracy: LocationAccuracy.high,
-      timeLimit: const Duration(seconds: 15),
-    );
-    setState(() {
-      _latitude = position.latitude.toString();
-      _longitude = position.longitude.toString();
-      _locationPermissionGranted = true;
-      _isLoading = false;
-    });
+// Helper function to save location data
+  Future<void> _saveLocationToPreferences() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('user_latitude', _latitude ?? '');
+      await prefs.setString('user_longitude', _longitude ?? '');
+      await prefs.setString('user_address', _address ?? '');
+      await prefs.setString('location_updated', DateTime.now().toIso8601String());
 
-    // Start continuous updates
-    _positionSubscription?.cancel();
-    LocationSettings locationSettings = const LocationSettings(
-      accuracy: LocationAccuracy.high,
-      distanceFilter: 10, // meters before update triggers
-    );
-    _positionSubscription = Geolocator.getPositionStream(
-      locationSettings: locationSettings,
-    ).listen((Position pos) {
-      setState(() {
-        _latitude = pos.latitude.toString();
-        _longitude = pos.longitude.toString();
-      });
-      // Optionally: update location in database here for real-time location (if desired)
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Location tracking started!"),
-        duration: Duration(seconds: 2),
-      ),
-    );
+      // Log for debugging
+    } catch (e) {
+    }
   }
 
   void _finishProfileSetup() {
@@ -624,122 +664,267 @@ class _StudentProfileSetupPageState extends State<StudentProfileSetupPage> {
     );
   }
 
+
+
   Widget _buildLocationStep() {
     double h = MediaQuery.of(context).size.height;
     double w = MediaQuery.of(context).size.width;
     return LayoutBuilder(
-      builder: (context, constraints) {
-        return SingleChildScrollView(
-          physics: ClampingScrollPhysics(),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight),
-            child: IntrinsicHeight(
-              child: Column(
-                children: [
-                  Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: w * 0.05,
-                      vertical: h * 0.04,
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            physics: ClampingScrollPhysics(),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: IntrinsicHeight(
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: w * 0.05,
+                        vertical: h * 0.04,
+                      ),
+                      child: CustomProgressBar(currentStep: 3, totalSteps: 4),
                     ),
-                    child: CustomProgressBar(currentStep: 3, totalSteps: 4),
-                  ),
-                  SizedBox(height: 30),
-                  Column(
-                    children: [
-                      Stack(
-                        alignment: Alignment.bottomRight,
-                        children: [
-                          Container(
-                            decoration: BoxDecoration(
-                              color: DarkColor.cardColor,
-                              shape: BoxShape.circle,
-                            ),
-                            padding: const EdgeInsets.all(30),
-                            child: Icon(
-                              Icons.location_on,
-                              color:
-                                  _locationPermissionGranted
-                                      ? Colors.green
-                                      : DarkColor.highlightColor,
-                              size: 100,
-                            ),
-                          ),
-                          if (_locationPermissionGranted)
+                    SizedBox(height: 30),
+                    Column(
+                      children: [
+                        Stack(
+                          alignment: Alignment.bottomRight,
+                          children: [
                             Container(
-                              padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
                                 color: DarkColor.cardColor,
                                 shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: DarkColor.secondary,
-                                  width: 3,
-                                ),
                               ),
-                              child: const Icon(
-                                Icons.check_circle,
-                                color: Colors.green,
-                                size: 30,
+                              padding: const EdgeInsets.all(30),
+                              child: Icon(
+                                Icons.location_on,
+                                color: _locationPermissionGranted
+                                    ? Colors.green
+                                    : DarkColor.highlightColor,
+                                size: 100,
                               ),
                             ),
-                        ],
-                      ),
-                      const SizedBox(height: 30),
-                      Text(
-                        _locationPermissionGranted
-                            ? "Location Captured!"
-                            : "Your Location?",
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                            if (_locationPermissionGranted)
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: DarkColor.cardColor,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: DarkColor.secondary,
+                                    width: 3,
+                                  ),
+                                ),
+                                child: const Icon(
+                                  Icons.check_circle,
+                                  color: Colors.green,
+                                  size: 30,
+                                ),
+                              ),
+                          ],
                         ),
-                      ),
-                      const SizedBox(height: 15),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 40),
-                        child: Text(
+                        const SizedBox(height: 30),
+                        Text(
                           _locationPermissionGranted
-                              ? "Your location has been successfully recorded."
-                              : "We need access to your location to provide you with nearby libraries and recommendations.",
-                          textAlign: TextAlign.center,
+                              ? "Location Captured!"
+                              : "Your Location?",
                           style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 16,
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 40),
-                      SolidButton(
-                        text:
+                        const SizedBox(height: 15),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 40),
+                          child: Text(
                             _locationPermissionGranted
-                                ? "Update Location"
-                                : "Allow Location Access",
-                        width: w * 0.8,
-                        height: 50,
-                        onPressed: _startLocationTracking,
-                        buttonColor:
-                            _locationPermissionGranted
-                                ? Colors.green
-                                : DarkColor.highlightColor,
-                      ),
-                      // Removed manual address entry option
-                    ],
-                  ),
-                  Spacer(),
-                  Padding(
-                    padding: EdgeInsets.all(20),
-                    child: SolidButton(
-                      text: "Complete Profile",
-                      onPressed: _finishProfileSetup,
-                      width: double.infinity,
+                                ? "Your location has been successfully recorded."
+                                : "We need access to your location to provide you with nearby libraries and recommendations.",
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ),
+
+                        // Display current location if available
+                        if (_locationPermissionGranted && _latitude != null &&
+                            _longitude != null) ...[
+                          const SizedBox(height: 30),
+                          Container(
+                            margin: EdgeInsets.symmetric(horizontal: 40),
+                            padding: EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: DarkColor.cardColor.withOpacity(0.7),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Colors.green.withOpacity(0.3),
+                                width: 1,
+                              ),
+                            ),
+                            child: Column(
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(Icons.my_location, color: Colors.green,
+                                        size: 18),
+                                    SizedBox(width: 10),
+                                    Text(
+                                      'Current Location',
+                                      style: TextStyle(
+                                        color: Colors.green,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment
+                                            .start,
+                                        children: [
+                                          Text(
+                                            'Latitude',
+                                            style: TextStyle(
+                                                color: Colors.white70,
+                                                fontSize: 12),
+                                          ),
+                                          SizedBox(height: 4),
+                                          Text(
+                                            _latitude!,
+                                            style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 15),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Container(
+                                      height: 30,
+                                      width: 1,
+                                      color: Colors.grey.withOpacity(0.3),
+                                      margin: EdgeInsets.symmetric(
+                                          horizontal: 12),
+                                    ),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment
+                                            .start,
+                                        children: [
+                                          Text(
+                                            'Longitude',
+                                            style: TextStyle(
+                                                color: Colors.white70,
+                                                fontSize: 12),
+                                          ),
+                                          SizedBox(height: 4),
+                                          Text(
+                                            _longitude!,
+                                            style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 15),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (_address != null &&
+                                    _address!.isNotEmpty) ...[
+                                  SizedBox(height: 12),
+                                  Divider(color: Colors.grey.withOpacity(0.3),
+                                      height: 1),
+                                  SizedBox(height: 12),
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment
+                                        .start,
+                                    children: [
+                                      Icon(Icons.place, color: Colors.white70,
+                                          size: 16),
+                                      SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          _address!,
+                                          style: TextStyle(color: Colors.white,
+                                              fontSize: 14),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ],
+
+                        const SizedBox(height: 30),
+
+                        // Main location button
+                        SolidButton(
+                          text: _locationPermissionGranted
+                              ? "Update Location"
+                              : "Allow Location Access",
+                          width: w * 0.8,
+                          height: 50,
+                          onPressed: _getCurrentLocation,
+                          buttonColor: _locationPermissionGranted
+                              ? Colors.green
+                              : DarkColor.highlightColor,
+                        ),
+
+                        // Get Current Location button
+                        if (_locationPermissionGranted)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 16),
+                            child: TextButton.icon(
+                              onPressed: _getCurrentLocation,
+                              icon: Icon(
+                                Icons.my_location,
+                                color: DarkColor.highlightColor,
+                                size: 20,
+                              ),
+                              label: Text(
+                                "Get Current Location",
+                                style: TextStyle(
+                                  color: DarkColor.highlightColor,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              style: TextButton.styleFrom(
+                                padding: EdgeInsets.symmetric(
+                                    vertical: 12, horizontal: 20),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(30),
+                                  side: BorderSide(
+                                      color: DarkColor.highlightColor
+                                          .withOpacity(0.5)),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
-                  ),
-                ],
+                    Spacer(),
+                    Padding(
+                      padding: EdgeInsets.all(20),
+                      child: SolidButton(
+                        text: "Complete Profile",
+                        onPressed: _finishProfileSetup,
+                        width: double.infinity,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-        );
-      },
+          );
+        }
     );
-  }
-}
+  }}

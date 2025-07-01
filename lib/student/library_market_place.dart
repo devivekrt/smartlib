@@ -10,6 +10,9 @@ import 'package:smartlib/widgets/solid_button.dart';
 import 'dart:math' show min, max;
 
 import '../data/string.dart';
+import '../function/review_service.dart';
+import '../function/student_location.dart';
+import 'my_bookings_screen.dart' show MyBookingsScreen;
 import 'library_detail_screen.dart';
 import 'main_tab_screen.dart';
 
@@ -104,7 +107,8 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
           await _database
               .ref(
                 '${SmartLib.constPath}/students/${SmartLib.userId}/joinedLibraries',
-              ).get();
+              )
+              .get();
 
       if (joinedSnapshot.exists) {
         final Map<dynamic, dynamic> joinedMap =
@@ -143,9 +147,6 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
     }
   }
 
-  // Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): 2025-06-23 10:38:56
-// Current User's Login: devivekrt
-
   /// Leave library function with improved error handling and user experience
   Future<void> _leaveLibrary(LibraryModel library) async {
     // Prevent multiple simultaneous attempts
@@ -157,10 +158,13 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
 
     try {
       // First check current status in RTDB
-      final statusSnapshot = await _database
-          .ref()
-          .child("${SmartLib.constPath}/students/${SmartLib.userId}/currentStatus")
-          .get();
+      final statusSnapshot =
+          await _database
+              .ref()
+              .child(
+                "${SmartLib.constPath}/students/${SmartLib.userId}/currentStatus",
+              )
+              .get();
 
       if (statusSnapshot.exists) {
         final statusData = statusSnapshot.value as Map<dynamic, dynamic>?;
@@ -181,87 +185,91 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
       final result = await showDialog<String>(
         context: context,
         barrierDismissible: false,
-        builder: (context) => AlertDialog(
-          backgroundColor: DarkColor.cardColor,
-          title: Text('Leave Library', style: TextStyle(color: Colors.white)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Are you sure you want to leave ${library.libraryName}?',
-                style: TextStyle(color: Colors.white70),
+        builder:
+            (context) => AlertDialog(
+              backgroundColor: DarkColor.cardColor,
+              title: Text(
+                'Leave Library',
+                style: TextStyle(color: Colors.white),
               ),
-              SizedBox(height: 16),
-
-              // Show warning if user is checked in
-              if (hasActiveBooking)
-                Container(
-                  padding: EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.red.withOpacity(0.3)),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Are you sure you want to leave ${library.libraryName}?',
+                    style: TextStyle(color: Colors.white70),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+                  SizedBox(height: 16),
+
+                  // Show warning if user is checked in
+                  if (hasActiveBooking)
+                    Container(
+                      padding: EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.red.withOpacity(0.3)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(
-                            Icons.warning_amber_rounded,
-                            color: Colors.amber,
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.warning_amber_rounded,
+                                color: Colors.amber,
+                              ),
+                              SizedBox(width: 8),
+                              Text(
+                                'You are checked in!',
+                                style: TextStyle(
+                                  color: Colors.amber,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
                           ),
-                          SizedBox(width: 8),
+                          SizedBox(height: 8),
                           Text(
-                            'You are checked in!',
-                            style: TextStyle(
-                              color: Colors.amber,
-                              fontWeight: FontWeight.bold,
-                            ),
+                            'You need to check out from this library before leaving.',
+                            style: TextStyle(color: Colors.white70),
                           ),
                         ],
                       ),
-                      SizedBox(height: 8),
-                      Text(
-                        'You need to check out from this library before leaving.',
-                        style: TextStyle(color: Colors.white70),
-                      ),
-                    ],
+                    ),
+                ],
+              ),
+              actions: [
+                // Cancel button
+                TextButton(
+                  onPressed: () => Navigator.pop(context, 'cancel'),
+                  child: Text('Cancel', style: TextStyle(color: Colors.grey)),
+                ),
+
+                // If not checked in, show leave button
+                if (!hasActiveBooking)
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: () => Navigator.pop(context, 'leave'),
+                    child: Text('Leave'),
                   ),
-                ),
-            ],
-          ),
-          actions: [
-            // Cancel button
-            TextButton(
-              onPressed: () => Navigator.pop(context, 'cancel'),
-              child: Text('Cancel', style: TextStyle(color: Colors.grey)),
+
+                // If checked in, show checkout navigation button
+                if (hasActiveBooking)
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.amber,
+                      foregroundColor: Colors.black,
+                    ),
+                    onPressed: () => Navigator.pop(context, 'checkout'),
+                    child: Text('Go to Check Out'),
+                  ),
+              ],
             ),
-
-            // If not checked in, show leave button
-            if (!hasActiveBooking)
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red,
-                  foregroundColor: Colors.white,
-                ),
-                onPressed: () => Navigator.pop(context, 'leave'),
-                child: Text('Leave'),
-              ),
-
-            // If checked in, show checkout navigation button
-            if (hasActiveBooking)
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.amber,
-                  foregroundColor: Colors.black,
-                ),
-                onPressed: () => Navigator.pop(context, 'checkout'),
-                child: Text('Go to Check Out'),
-              ),
-          ],
-        ),
       );
 
       // Handle dialog result
@@ -276,7 +284,7 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
 
         case 'cancel':
         default:
-        // Do nothing
+          // Do nothing
           return;
       }
     } catch (e) {
@@ -311,12 +319,12 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
       final batch = FirebaseFirestore.instance.batch();
 
       // 1. Check for active bookings (another verification)
-      final bookingsQuery = await FirebaseFirestore.instance
-          .collection('seatBookings')
-          .where('libraryId', isEqualTo: library.id)
-          .where('studentId', isEqualTo: SmartLib.userId)
-          .where('status', whereIn: ['active', 'pending', 'confirmed'])
-          .get();
+      final bookingsQuery =
+          await FirebaseFirestore.instance
+              .collection('seatBookings')
+              .where('studentId', isEqualTo: SmartLib.userId)
+              .where('status', whereIn: ['active', 'confirmed'])
+              .get();
 
       if (bookingsQuery.docs.isNotEmpty) {
         setState(() {
@@ -325,13 +333,18 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('You have active bookings in this library. Please cancel them first.'),
+            content: Text(
+              'You have active bookings in this library. Please cancel them first.',
+            ),
             backgroundColor: Colors.orange,
             action: SnackBarAction(
               label: 'View Bookings',
               onPressed: () {
                 // Navigate to bookings page
-                // Implementation depends on your app's navigation structure
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => MyBookingsScreen()),
+                );
               },
             ),
           ),
@@ -343,42 +356,34 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
       await _database
           .ref()
           .child(
-        "${SmartLib.constPath}/students/${SmartLib.userId}/joinedLibraries/${library.id}",
-      )
+            "${SmartLib.constPath}/students/${SmartLib.userId}/joinedLibraries/${library.id}",
+          )
           .remove();
 
-// Update student count in library if this is a new student
+      await _database
+          .ref()
+          .child(
+        "${SmartLib.constPath}/students/${SmartLib.userId}/currentStatus",
+      ).remove();
+
+      // Update student count in library if this is a new student
       final libraryDocRef = FirebaseFirestore.instance
           .collection("libraries")
           .doc(library.id);
       batch.update(libraryDocRef, {'students': FieldValue.increment(-1)});
 
-      // Update available seats count
-      batch.update(libraryDocRef, {'availableSeats': FieldValue.increment(1)});
-
+      // Reference to the library subscribers collection
+      final subscribersRef = FirebaseFirestore.instance
+          .collection('libraries')
+          .doc(library.id)
+          .collection('subscribers')
+          .doc(SmartLib.userId);
+      // 3. Remove the user from the library subscribers
+      batch.delete(subscribersRef);
       // Execute the batch
       await batch.commit();
-      // 4. Update user preferences to remove this library if it exists
-      final userPrefsRef = FirebaseFirestore.instance
-          .collection('userPreferences')
-          .doc(SmartLib.userId);
 
-      // Check if document exists first
-      final userPrefsDoc = await userPrefsRef.get();
-      if (userPrefsDoc.exists) {
-        final prefsData = userPrefsDoc.data();
-        if (prefsData != null && prefsData['favoriteLibraries'] is List) {
-          List<dynamic> favorites = prefsData['favoriteLibraries'];
-          if (favorites.contains(library.id)) {
-            batch.update(userPrefsRef, {
-              'favoriteLibraries': FieldValue.arrayRemove([library.id]),
-            });
-          }
-        }
-      }
 
-      // Execute batch
-      await batch.commit();
 
       // 5. Update our local lists
       setState(() {
@@ -421,10 +426,8 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
     try {
       // If we don't have a booking ID, navigate to general checkout page
       if (bookingId == null || bookingId.isEmpty) {
-
       } else {
         // If we have a booking ID, navigate to specific checkout
-
       }
     } catch (e) {
       print('Error navigating to checkout: $e');
@@ -513,6 +516,14 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
     });
   }
 
+
+// Add these variables to your State class
+  bool _filterOpenNow = false;
+  bool _filterNearby = false;
+  bool _filter24x7 = false;
+  bool _filterTopRated = false;
+  double _maxDistance = 10.0; // Default 10 km
+
   void _showFilterOptions() {
     showModalBottomSheet(
       context: context,
@@ -520,40 +531,117 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(15)),
       ),
-      builder:
-          (context) => Container(
-            padding: EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  "Filter Options",
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => Container(
+          padding: EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    "Library Filters",
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  Spacer(),
+                  TextButton(
+                    onPressed: () {
+                      setModalState(() {
+                        _filterOpenNow = false;
+                        _filterNearby = false;
+                        _filter24x7 = false;
+                        _filterTopRated = false;
+                        _maxDistance = 10.0;
+                      });
+                    },
+                    child: Text("Reset", style: TextStyle(color: Colors.blue)),
+                  ),
+                ],
+              ),
+              SizedBox(height: 15),
+
+              // Simple filter options
+              _buildFilterOption(
+                "Open Now",
+                _filterOpenNow,
+                    (value) {
+                  setModalState(() => _filterOpenNow = value);
+                },
+              ),
+              _buildFilterOption(
+                "24/7 Access",
+                _filter24x7,
+                    (value) {
+                  setModalState(() => _filter24x7 = value);
+                },
+              ),
+              _buildFilterOption(
+                "Top Rated (4+ stars)",
+                _filterTopRated,
+                    (value) {
+                  setModalState(() => _filterTopRated = value);
+                },
+              ),
+
+              // Nearby filter with distance slider
+              _buildFilterOption(
+                "Nearby (within ${_maxDistance.toStringAsFixed(0)} km)",
+                _filterNearby,
+                    (value) {
+                  setModalState(() => _filterNearby = value);
+                },
+              ),
+
+              // Only show distance slider when nearby is selected
+              if (_filterNearby)
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  child: Row(
+                    children: [
+                      Text("Distance: ", style: TextStyle(color: Colors.white70)),
+                      Expanded(
+                        child: Slider(
+                          value: _maxDistance,
+                          min: 1.0,
+                          max: 10.0,
+                          divisions: 10,
+                          activeColor: Colors.blue,
+                          onChanged: (value) {
+                            setModalState(() => _maxDistance = value);
+                          },
+                        ),
+                      ),
+                      Text(
+                        "${_maxDistance.toStringAsFixed(0)} km",
+                        style: TextStyle(color: Colors.white70),
+                      ),
+                    ],
                   ),
                 ),
-                SizedBox(height: 15),
-                _buildFilterOption("Rating (4+)"),
-                _buildFilterOption("Open Now"),
-                _buildFilterOption("24x7 Access"),
-                _buildFilterOption("Distance (< 3km)"),
-                SizedBox(height: 15),
-                SolidButton(
-                  text: "Apply Filters",
-                  width: double.infinity,
-                  height: 45,
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ],
-            ),
+
+              SizedBox(height: 15),
+              SolidButton(
+                text: "Apply Filters",
+                width: double.infinity,
+                height: 45,
+                onPressed: () {
+                  Navigator.pop(context);
+                  _applyFilters();
+                },
+              ),
+            ],
           ),
+        ),
+      ),
     );
   }
 
-  Widget _buildFilterOption(String title) {
+  Widget _buildFilterOption(String title, bool value, Function(bool) onChanged) {
     return Container(
       width: double.infinity,
       padding: EdgeInsets.symmetric(vertical: 10),
@@ -562,15 +650,93 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
           Text(title, style: TextStyle(fontSize: 16, color: Colors.white70)),
           Spacer(),
           Switch(
-            value: false,
-            onChanged: (value) {
-              // Implement filter data here
-            },
+            value: value,
+            onChanged: onChanged,
             activeColor: Colors.blue,
           ),
         ],
       ),
     );
+  }
+
+// Simple function to apply filters
+  void _applyFilters() {
+    // Start with all libraries
+    List<LibraryModel> filtered = [..._allLibraries];
+
+    // Apply filters one by one
+    if (_filterOpenNow) {
+      filtered = filtered.where((lib) => _isLibraryOpen(lib)).toList();
+    }
+
+
+
+    if (_filterTopRated) {
+      filtered = filtered.where((lib) => (lib.rating ?? 0) >= 4.0).toList();
+    }
+
+    if (_filterNearby) {
+      final locationService = StudentLocationService();
+      if (locationService.isLocationAvailable) {
+        filtered = filtered.where((lib) {
+          final lat = double.tryParse(lib.locationLatitude ?? '') ?? 0.0;
+          final lng = double.tryParse(lib.locationLongitude ?? '') ?? 0.0;
+          final distance = locationService.calculateDistanceInKm(lat, lng);
+          return distance != null && distance <= _maxDistance;
+        }).toList();
+      }
+    }
+
+    // Update filtered libraries
+    setState(() {
+      _filteredLibraries = filtered;
+    });
+
+    // Show feedback
+    int count = _filteredLibraries.length;
+    String message = count > 0
+        ? "Found $count matching libraries"
+        : "No libraries match your filters";
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+// Simple function to check if library is open
+  bool _isLibraryOpen(LibraryModel library) {
+    // Get current time and day
+    final now = DateTime.now();
+    final currentHour = now.hour;
+    final currentDay = now.weekday; // 1-7, Monday-Sunday
+
+
+
+    // Check operating hours if available
+    try {
+      final hours = library.openingHours;
+      if (hours != null) {
+        final todayHours = hours['day${currentDay}']; // day1, day2, etc.
+        if (todayHours != null) {
+          // Simple check: if current hour is within operating hours
+          final openHour = todayHours['open'];
+          final closeHour = todayHours['close'];
+          if (openHour != null && closeHour != null) {
+            // Handle overnight hours
+            if (closeHour < openHour) {
+              return currentHour >= openHour || currentHour < closeHour;
+            } else {
+              return currentHour >= openHour && currentHour < closeHour;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('[2025-06-29 10:51:06] devivekrt: Error checking library hours: $e');
+    }
+
+    // Default to closed if we can't determine
+    return false;
   }
 
   void _searchLibraries(String query) {
@@ -593,7 +759,7 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
     });
   }
 
-  void _navigateToLibraryDetail(LibraryModel library) async {
+  void navigateToLibraryDetail(LibraryModel library) async {
     // Check if student is already checked into another library
     if (_isCheckedIntoLibrary && _currentLibraryId != library.id) {
       // Find the current library name
@@ -1000,6 +1166,378 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
       );
     }
 
+    // Add this section to check for reviewable libraries
+    return FutureBuilder<List<LibraryModel>>(
+      future: _checkForReviewableLibraries(),
+      builder: (context, snapshot) {
+        // Show loading if needed
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator());
+        }
+
+        // If error, just show regular list
+        if (snapshot.hasError) {
+          return _buildJoinedLibrariesList();
+        }
+
+        final reviewableLibraries =
+            snapshot.data?.where((lib) => lib.canReview ?? false).toList() ??
+            [];
+
+        // If no reviewable libraries, just show regular list
+        if (reviewableLibraries.isEmpty) {
+          return _buildJoinedLibrariesList();
+        }
+
+        // Show reviewable libraries banner at top
+        return Column(
+          children: [
+            // Reviewable libraries section
+            Padding(
+              padding: EdgeInsets.only(bottom: 20),
+              child: _buildReviewBanner(reviewableLibraries),
+            ),
+
+            // Divider
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20),
+              child: Divider(color: Colors.white.withOpacity(0.2)),
+            ),
+
+            // Regular joined libraries
+            Expanded(child: _buildJoinedLibrariesList()),
+          ],
+        );
+      },
+    );
+  }
+
+  // Add these helper methods
+  Future<List<LibraryModel>> _checkForReviewableLibraries() async {
+    final ReviewService _reviewService = ReviewService();
+    final eligibleList = await _reviewService.getLibrariesEligibleForReview();
+
+    // Mark libraries that are eligible for review
+    for (var library in _joinedLibraries) {
+      final isEligible = eligibleList.any((lib) => lib['id'] == library.id);
+      library.canReview = isEligible;
+    }
+
+    return _joinedLibraries;
+  }
+
+  Widget _buildReviewBanner(List<LibraryModel> reviewableLibraries) {
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: 20),
+      padding: EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF8A2387), Color(0xFFE94057), Color(0xFFF27121)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 10,
+            offset: Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.rate_review, color: Colors.white, size: 22),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Share Your Experience!',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 10),
+          Text(
+            'You\'ve been using these libraries for 15+ days. Help others by sharing your feedback!',
+            style: TextStyle(color: Colors.white.withOpacity(0.9)),
+          ),
+          SizedBox(height: 15),
+          SizedBox(
+            height: 90,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: reviewableLibraries.length,
+              itemBuilder: (context, index) {
+                final library = reviewableLibraries[index];
+                return GestureDetector(
+                  onTap: () => _showReviewDialog(library),
+                  child: Container(
+                    width: 150,
+                    margin: EdgeInsets.only(right: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        // Library image or icon
+                        Container(
+                          height: 40,
+                          width: 40,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.white.withOpacity(0.2),
+                            image:
+                                library.libraryImageUrl != null
+                                    ? DecorationImage(
+                                      image: NetworkImage(
+                                        library.libraryImageUrl!,
+                                      ),
+                                      fit: BoxFit.cover,
+                                    )
+                                    : null,
+                          ),
+                          child:
+                              library.libraryImageUrl == null
+                                  ? Icon(
+                                    Icons.library_books,
+                                    color: Colors.white,
+                                  )
+                                  : null,
+                        ),
+                        SizedBox(height: 8),
+                        Text(
+                          library.libraryName ?? 'Unknown Library',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          'Tap to review',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.8),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Method to show the review dialog
+  void _showReviewDialog(LibraryModel library) {
+    double rating = 0;
+    final feedbackController = TextEditingController();
+    bool isSubmitting = false;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              backgroundColor: DarkColor.cardColor,
+              title: Text(
+                'Rate Your Experience',
+                style: TextStyle(color: Colors.white),
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'How was your experience at ${library.libraryName}?',
+                      style: TextStyle(color: Colors.white70),
+                    ),
+                    SizedBox(height: 20),
+
+                    // Rating stars
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(5, (index) {
+                        return IconButton(
+                          icon: Icon(
+                            index < rating.round()
+                                ? Icons.star
+                                : Icons.star_border,
+                            color:
+                                index < rating.round()
+                                    ? Colors.amber
+                                    : Colors.grey,
+                            size: 36,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              rating = index + 1.0;
+                            });
+                          },
+                        );
+                      }),
+                    ),
+
+                    SizedBox(height: 5),
+                    Center(
+                      child: Text(
+                        _getRatingText(rating),
+                        style: TextStyle(
+                          color: _getRatingColor(rating),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+
+                    SizedBox(height: 20),
+
+                    // Feedback text field
+                    TextField(
+                      controller: feedbackController,
+                      maxLines: 3,
+                      maxLength: 200,
+                      decoration: InputDecoration(
+                        hintText: 'Share your experience (optional)',
+                        hintStyle: TextStyle(color: Colors.grey),
+                        filled: true,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade700),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(
+                            color: DarkColor.highlightColor,
+                          ),
+                        ),
+                      ),
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text('Cancel', style: TextStyle(color: Colors.grey)),
+                ),
+                isSubmitting
+                    ? Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                    : ElevatedButton(
+                      onPressed:
+                          rating <= 0
+                              ? null
+                              : () async {
+                                setState(() {
+                                  isSubmitting = true;
+                                });
+
+                                final ReviewService _reviewService =
+                                    ReviewService();
+                                final success = await _reviewService
+                                    .submitReview(
+                                      libraryId: library.id!,
+                                      rating: rating,
+                                      feedback: feedbackController.text,
+                                    );
+
+                                if (success) {
+                                  Navigator.pop(context);
+
+                                  // Refresh the joined libraries list
+                                  this.setState(() {
+                                    // Mark this library as reviewed
+                                    for (var lib in _joinedLibraries) {
+                                      if (lib.id == library.id) {
+                                        lib.canReview = false;
+                                      }
+                                    }
+                                  });
+
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        'Thank you for your review!',
+                                      ),
+                                      backgroundColor: Colors.green,
+                                    ),
+                                  );
+                                } else {
+                                  setState(() {
+                                    isSubmitting = false;
+                                  });
+
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        'Failed to submit review. Please try again.',
+                                      ),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                }
+                              },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: DarkColor.highlightColor,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: Text('Submit Review'),
+                    ),
+              ],
+            );
+          },
+        );
+      },
+    ).then((_) {
+      feedbackController.dispose();
+    });
+  }
+
+  // Helper methods for rating text and colors
+  String _getRatingText(double rating) {
+    if (rating <= 0) return 'Select Rating';
+    if (rating <= 1) return 'Poor';
+    if (rating <= 2) return 'Fair';
+    if (rating <= 3) return 'Good';
+    if (rating <= 4) return 'Very Good';
+    return 'Excellent';
+  }
+
+  Color _getRatingColor(double rating) {
+    if (rating <= 0) return Colors.grey;
+    if (rating <= 1) return Colors.red;
+    if (rating <= 2) return Colors.orange;
+    if (rating <= 3) return Colors.amber;
+    if (rating <= 4) return Colors.lightGreen;
+    return Colors.green;
+  }
+
+  // Method to build the regular joined libraries list
+  Widget _buildJoinedLibrariesList() {
     return ListView.builder(
       padding: EdgeInsets.all(20),
       itemCount: _joinedLibraries.length,
@@ -1014,7 +1552,6 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
   Widget _buildJoinedLibraryCard(LibraryModel library) {
     final color = _getColorForLibrary(library);
     final availableSeats = library.availableSeats ?? 0;
-    final totalSeats = library.totalSeats ?? 1;
     final isOpen = (availableSeats > 0);
 
     // Check if this is the library the user is currently checked into
@@ -1033,7 +1570,7 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
     }
 
     return GestureDetector(
-      onTap: () => _navigateToLibraryDetail(library),
+      onTap: () => navigateToLibraryDetail(library),
       child: Container(
         margin: EdgeInsets.only(bottom: 15),
         decoration: BoxDecoration(
@@ -1322,7 +1859,7 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
                         child: OutlinedButton.icon(
                           icon: Icon(Icons.visibility, size: 16),
                           label: Text("View"),
-                          onPressed: () => _navigateToLibraryDetail(library),
+                          onPressed: () => navigateToLibraryDetail(library),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: color,
                             side: BorderSide(color: color),
@@ -1391,7 +1928,7 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
         !_isCheckedIntoLibrary || _currentLibraryId == library.id;
 
     return GestureDetector(
-      onTap: () => _navigateToLibraryDetail(library),
+      onTap: () => navigateToLibraryDetail(library),
       child: Container(
         width: double.infinity,
         margin: EdgeInsets.only(bottom: 15),
@@ -1678,7 +2215,7 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
                   child: InkWell(
                     onTap:
                         canBookNewSeat && !_isJoiningLibrary
-                            ? () => _navigateToLibraryDetail(library)
+                            ? () => navigateToLibraryDetail(library)
                             : null,
                     child: Center(
                       child:
