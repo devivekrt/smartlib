@@ -284,7 +284,7 @@ class NotificationService {
 
     try {
       // Update Firestore
-      await _firestore.collection('notifications').doc(notificationId).update({
+      await _firestore.collection('userNotifications').doc(notificationId).update({
         'read': true,
       });
 

@@ -54,9 +54,20 @@ class _SelectPageState extends State<SelectPage> {
                           onTap: () {
                             Navigator.push(
                               context,
-                              MaterialPageRoute(
-                                builder: (context) => SignUp(userType: UserType.librarian),
-                              ),
+                                PageRouteBuilder(
+                                  pageBuilder: (context, animation, secondaryAnimation) => SignUp(userType: UserType.librarian),
+                                  transitionDuration: Duration(milliseconds: 500),
+                                  transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                                    var begin = Offset(1.0, 0.0);
+                                    var end = Offset.zero;
+                                    var curve = Curves.ease;
+
+                                    var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+                                    var offsetAnimation = animation.drive(tween);
+
+                                    return SlideTransition(position: offsetAnimation, child: child);
+                                  },
+                                )
                             );
                           },
                           child: Card(
@@ -95,9 +106,20 @@ class _SelectPageState extends State<SelectPage> {
                           onTap: () {
                             Navigator.push(
                               context,
-                              MaterialPageRoute(
-                                builder: (context) => SignUp(userType: UserType.student),
-                              ),
+                                PageRouteBuilder(
+                                  pageBuilder: (context, animation, secondaryAnimation) => SignUp(userType: UserType.student),
+                                  transitionDuration: Duration(milliseconds: 500),
+                                  transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                                    var begin = Offset(1.0, 0.0);
+                                    var end = Offset.zero;
+                                    var curve = Curves.ease;
+
+                                    var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+                                    var offsetAnimation = animation.drive(tween);
+
+                                    return SlideTransition(position: offsetAnimation, child: child);
+                                  },
+                                )
                             );
                           },
                           child: Card(
@@ -136,7 +158,12 @@ class _SelectPageState extends State<SelectPage> {
                           onPressed: () {
                             Navigator.push(
                               context,
-                              MaterialPageRoute(builder: (context) => Login()),
+                                PageRouteBuilder(
+                                  pageBuilder: (context, animation, secondaryAnimation) => Login(),
+                                  transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                                    return FadeTransition(opacity: animation, child: child);
+                                  },
+                                )
                             ); // Navigate to login page
                           },
                           child: Text("Login"),

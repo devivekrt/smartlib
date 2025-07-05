@@ -97,9 +97,6 @@ class _StudentCardPageState extends State<StudentCardPage> with SingleTickerProv
           print("Current Status Data: $currentStatus"); // Debug print
         }
 
-        // Get registered libraries
-        await _loadRegisteredLibraries(userId);
-
         setState(() {
           _userData = typedUserData;
           _currentStatus = currentStatus;
@@ -110,27 +107,7 @@ class _StudentCardPageState extends State<StudentCardPage> with SingleTickerProv
       } else {
         print("User data not found in database"); // Debug print
 
-        // Try to get at least some basic info from auth if available
-        try {
-          final userDoc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
-          if (userDoc.exists) {
-            setState(() {
-              _userData = userDoc.data() ?? {};
-              _isLoading = false;
-            });
 
-            print("User data from Firestore: $_userData"); // Debug print
-          } else {
-            setState(() {
-              _isLoading = false;
-            });
-          }
-        } catch (e) {
-          print("Error getting user from Firestore: $e");
-          setState(() {
-            _isLoading = false;
-          });
-        }
       }
     } catch (e) {
       print('Error loading student data: $e');
@@ -144,138 +121,7 @@ class _StudentCardPageState extends State<StudentCardPage> with SingleTickerProv
     }
   }
 
-  // Load registered libraries - IMPROVED
-  Future<void> _loadRegisteredLibraries(String userId) async {
-    try {
-      List<Map<String, dynamic>> libraries = [];
 
-      // First check current status for active library
-      if (_currentStatus.isNotEmpty && _currentStatus['currentLibraryId'] != null) {
-        final currentLibraryId = _currentStatus['currentLibraryId'].toString();
-
-        // Get current library details
-        try {
-          final libraryDoc = await FirebaseFirestore.instance
-              .collection('libraries')
-              .doc(currentLibraryId)
-              .get();
-
-          if (libraryDoc.exists) {
-            final libraryData = libraryDoc.data() ?? {};
-            libraryData['libraryId'] = currentLibraryId;
-            libraries.add(libraryData);
-
-            print("Added current library: $currentLibraryId"); // Debug print
-          }
-        } catch (e) {
-          print('Error getting current library details: $e');
-        }
-      }
-
-      // Then query bookings for this student to find other registered libraries
-      final bookingsQuery = await FirebaseFirestore.instance
-          .collection('seatBookings')
-          .where('studentId', isEqualTo: userId)
-          .limit(5) // Increased limit for more chances to find libraries
-          .get();
-
-      // Get unique libraries
-      Set<String> libraryIds = libraries.map((lib) => lib['libraryId'].toString()).toSet();
-
-      for (final doc in bookingsQuery.docs) {
-        final data = doc.data();
-        final libraryId = data['libraryId']?.toString() ?? '';
-
-        if (libraryId.isNotEmpty && !libraryIds.contains(libraryId)) {
-          libraryIds.add(libraryId);
-
-          // Get library details
-          try {
-            final libraryDoc = await FirebaseFirestore.instance
-                .collection('libraries')
-                .doc(libraryId)
-                .get();
-
-            if (libraryDoc.exists) {
-              final libraryData = libraryDoc.data() ?? {};
-              libraryData['libraryId'] = libraryId;
-              libraries.add(libraryData);
-
-              print("Added library from booking: $libraryId"); // Debug print
-
-              // Limit to max 3 libraries
-              if (libraries.length >= 3) break;
-            }
-          } catch (e) {
-            print('Error getting library details: $e');
-          }
-        }
-      }
-
-      // If no libraries found yet, try getting from realtime database
-      if (libraries.isEmpty) {
-        try {
-          final bookingsRef = FirebaseDatabase.instance
-              .ref()
-              .child('users/students/$userId/bookings')
-              .limitToLast(5);
-
-          final bookingsSnapshot = await bookingsRef.get();
-
-          if (bookingsSnapshot.exists) {
-            final bookingsData = bookingsSnapshot.value as Map<dynamic, dynamic>;
-
-            for (var entry in bookingsData.entries) {
-              final bookingData = entry.value as Map<dynamic, dynamic>;
-              final libraryId = bookingData['libraryId']?.toString() ?? '';
-
-              if (libraryId.isNotEmpty && !libraryIds.contains(libraryId)) {
-                libraryIds.add(libraryId);
-
-                // Get library details
-                try {
-                  final libraryRef = FirebaseDatabase.instance
-                      .ref()
-                      .child('libraries/$libraryId');
-
-                  final librarySnapshot = await libraryRef.get();
-
-                  if (librarySnapshot.exists) {
-                    final libData = librarySnapshot.value as Map<dynamic, dynamic>;
-                    Map<String, dynamic> libraryData = {};
-
-                    libData.forEach((key, value) {
-                      libraryData[key.toString()] = value;
-                    });
-
-                    libraryData['libraryId'] = libraryId;
-                    libraries.add(libraryData);
-
-                    print("Added library from Realtime DB: $libraryId"); // Debug print
-
-                    // Limit to max 3 libraries
-                    if (libraries.length >= 3) break;
-                  }
-                } catch (e) {
-                  print('Error getting library from Realtime DB: $e');
-                }
-              }
-            }
-          }
-        } catch (e) {
-          print('Error loading bookings from Realtime DB: $e');
-        }
-      }
-
-      setState(() {
-        _registeredLibraries = libraries;
-      });
-
-      print("Final registered libraries: ${libraries.length}"); // Debug print
-    } catch (e) {
-      print('Error loading registered libraries: $e');
-    }
-  }
 
   // Format date
   String _formatDate(String dateStr) {
@@ -338,22 +184,7 @@ class _StudentCardPageState extends State<StudentCardPage> with SingleTickerProv
             fontWeight: FontWeight.bold,
           ),
         ),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.refresh),
-            onPressed: _loadStudentData,
-            tooltip: 'Refresh Data',
-          ),
-          IconButton(
-            icon: Icon(Icons.qr_code),
-            onPressed: () {
-              setState(() {
-                _showQrCode = !_showQrCode;
-              });
-            },
-            tooltip: 'Show/Hide QR Code',
-          ),
-        ],
+
       ),
       body: Column(
         children: [
@@ -464,87 +295,6 @@ class _StudentCardPageState extends State<StudentCardPage> with SingleTickerProv
 
                   Gap(20),
 
-                  // QR Code Section
-                  if (_showQrCode)
-                    Container(
-                      width: double.infinity,
-                      padding: EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: isDarkMode ? Colors.grey[800] : Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: cardShadowColor,
-                            blurRadius: 10,
-                            offset: Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        children: [
-                          Text(
-                            'Your Library Access Code',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: textColor,
-                            ),
-                          ),
-                          Gap(10),
-                          Text(
-                            'Show this QR code to verify your identity at the library',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: textColor.withOpacity(0.7),
-                            ),
-                          ),
-                          Gap(20),
-                          Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(
-                                color: Color(0xff1940CC).withOpacity(0.3),
-                                width: 2,
-                              ),
-                            ),
-                            padding: EdgeInsets.all(10),
-                            child: QrImageView(
-                              data: _generateQrData(),
-                              version: QrVersions.auto,
-                              size: 200,
-                              backgroundColor: Colors.white,
-                              eyeStyle: QrEyeStyle(
-                                eyeShape: QrEyeShape.square,
-                                color: Color(0xff1940CC),
-                              ),
-                              dataModuleStyle: QrDataModuleStyle(
-                                dataModuleShape: QrDataModuleShape.square,
-                                color: Color(0xff1940CC),
-                              ),
-                            ),
-                          ),
-                          Gap(20),
-                          Text(
-                            'Student ID: ${SmartLib.userId}',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: textColor,
-                            ),
-                          ),
-                          Gap(5),
-                          Text(
-                            'Valid until: Dec 31, 2025',
-                            style: TextStyle(
-                              color: textColor.withOpacity(0.7),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                  Gap(20),
 
                   // Registered Libraries
                   Container(
@@ -829,7 +579,7 @@ class _StudentCardPageState extends State<StudentCardPage> with SingleTickerProv
                           ),
                         ),
                         Text(
-                          'SmartLib University',
+                          SmartLib.libraryName,
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 18,
@@ -994,8 +744,6 @@ class _StudentCardPageState extends State<StudentCardPage> with SingleTickerProv
   Widget _buildBackCard(Color textColor, Color shadowColor) {
     final String studentName = _userData['fullName'] ?? _userData['name'] ?? 'Student Name';
     final String studentId = SmartLib.userId;
-    final String email = _userData['email'] ?? 'email@example.com';
-    final String phone = _userData['phone'] ?? 'N/A';
     final String qrData = '$studentId\_SMARTCARD';
 
     return Container(
@@ -1167,7 +915,6 @@ class _StudentCardPageState extends State<StudentCardPage> with SingleTickerProv
   Widget _buildLibraryItem(Map<String, dynamic> library, Color textColor) {
     final String libraryName = library['libraryName'] ?? library['name'] ?? 'Unknown Library';
     final String libraryId = library['libraryId'] ?? '';
-    final String address = library['address'] ?? '';
     final bool isCurrentLibrary = _currentStatus.isNotEmpty &&
         _currentStatus['currentLibraryId'] == libraryId;
 
@@ -1213,16 +960,7 @@ class _StudentCardPageState extends State<StudentCardPage> with SingleTickerProv
                     color: textColor,
                   ),
                 ),
-                if (address.isNotEmpty)
-                  Text(
-                    address,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: textColor.withOpacity(0.7),
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+
               ],
             ),
           ),
@@ -1278,30 +1016,6 @@ class _StudentCardPageState extends State<StudentCardPage> with SingleTickerProv
     );
   }
 
-  // Build contact info for back of card
-  Widget _buildContactInfo(IconData icon, String text) {
-    return Row(
-      children: [
-        Icon(
-          icon,
-          color: Colors.white,
-          size: 12, // Smaller icon
-        ),
-        SizedBox(width: 6), // Less spacing
-        Expanded(
-          child: Text(
-            text,
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 11, // Smaller font
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ],
-    );
-  }
 
   // Build current status detail
   Widget _buildStatusDetail({required String label, required String value, required IconData icon}) {

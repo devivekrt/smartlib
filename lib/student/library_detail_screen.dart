@@ -408,13 +408,13 @@ class _LibraryDetailScreenState extends State<LibraryDetailScreen> {
                                   borderRadius: BorderRadius.circular(28),
                                 ),
                                 onPressed: () {
-                                  Navigator.pushAndRemoveUntil(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => MainTabScreen(),
-                                    ),
-                                    (route) => false,
-                                  );
+                                  Navigator.pushAndRemoveUntil(context, PageRouteBuilder(
+                                    pageBuilder: (_, __, ___) => MainTabScreen(),
+                                    transitionsBuilder: (_, animation, __, child) {
+                                      return FadeTransition(opacity: animation, child: child);
+                                    },
+                                    transitionDuration: Duration(milliseconds: 500),
+                                  ), (route) => false);
                                 },
                                 child: Text(
                                   "Skip",

@@ -1,29 +1,30 @@
-// Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): 2025-06-29 15:10:55
-// Current User's Login: devivekrti
-
 import 'dart:async';
+import 'dart:core';
+import 'dart:core';
 import 'dart:math';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:smartlib/data/string.dart';
 import 'package:smartlib/student/select_page.dart';
 import 'package:smartlib/student/welcomescreen.dart';
+import '../function/listen_data.dart';
 import '../function/review_service.dart';
 import '../function/student_function.dart';
 import '../librarian/bottom_navigation/librarain_navigation_page.dart';
 import 'main_tab_screen.dart';
 
 class SplashScreen extends StatefulWidget {
-  const SplashScreen({Key? key}) : super(key: key);
+  const SplashScreen({super.key});
 
   @override
   _SplashScreenState createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMixin {
+class _SplashScreenState extends State<SplashScreen>
+    with TickerProviderStateMixin {
   // Animation controllers
   late AnimationController _logoAnimationController;
   late AnimationController _backgroundAnimationController;
@@ -36,7 +37,6 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   // Timer for auto navigation
   Timer? _navigationTimer;
   bool _isNavigating = false;
-
 
   @override
   void initState() {
@@ -65,24 +65,23 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     // Logo scale animation
     _logoScaleAnimation = TweenSequence([
       TweenSequenceItem(
-        tween: Tween<double>(begin: 0.0, end: 1.2).chain(
-          CurveTween(curve: Curves.easeOutCubic),
-        ),
+        tween: Tween<double>(
+          begin: 0.0,
+          end: 1.2,
+        ).chain(CurveTween(curve: Curves.easeOutCubic)),
         weight: 70,
       ),
       TweenSequenceItem(
-        tween: Tween<double>(begin: 1.2, end: 1.0).chain(
-          CurveTween(curve: Curves.easeInOut),
-        ),
+        tween: Tween<double>(
+          begin: 1.2,
+          end: 1.0,
+        ).chain(CurveTween(curve: Curves.easeInOut)),
         weight: 30,
       ),
     ]).animate(_logoAnimationController);
 
     // Logo opacity animation
-    _logoOpacityAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(
+    _logoOpacityAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _logoAnimationController,
         curve: Interval(0.0, 0.6, curve: Curves.easeOut),
@@ -107,98 +106,149 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     _logoAnimationController.forward();
   }
 
-
   Future<void> _checkLoginStatus() async {
     if (_isNavigating) return;
     _isNavigating = true;
-    try {
 
+    try {
       // Check for existing user authentication
       String? userId = await AuthService.getUserId();
       String? userRole = await AuthService.getUserRole();
-      if (userId != null) {
-        SmartLib.userId = userId;
-      }
-      print("User ID: $userId, User Role: $userRole");
 
-      // If user is authenticated, verify they still exist in database
+      // Initialize SmartLib data based on role
       if (userId != null && userRole != null) {
+        if (userRole == 'student') {
+          SmartLib.userId = userId;
+          SmartLib.studentId = userId;
+          SmartLib.userType = 'student';
+        } else if (userRole == 'librarian') {
+          SmartLib.userId = userId;
+          SmartLib.librarianId = userId;
+          SmartLib.userType = 'librarian';
+        } else {
+          SmartLib.userId = userId;
+        }
+
+        // Try to preload some user data if we have network connection
         try {
+
+
+          // Initialize the data listener service
+          final listenData = ListenData();
+
+          // Pre-load user data
+          await listenData.getUserData();
+        } catch (e) {
+          // Non-critical error - we can continue even if data preload fails
+        }
+
+        // Verify user still exists in the database
+        try {
+          // Set appropriate database path based on user role
+          String userPath;
+          if (userRole == 'student') {
+            userPath = "${SmartLib.constPath}/students/$userId";
+          } else if (userRole == 'librarian') {
+            userPath = "${SmartLib.constPath}/librarians/$userId";
+          } else {
+            throw Exception("Invalid user role: $userRole");
+          }
+
+          // Check if user exists in database
           DatabaseEvent userSnapshot = await FirebaseDatabase.instance
               .ref()
-              .child("${SmartLib.constStudentPath}/$userId")
+              .child(userPath)
               .once()
               .timeout(const Duration(seconds: 5));
 
-          if (userSnapshot.snapshot.exists) {
-            // User exists, navigate to appropriate home page
-            // Start exit animation
-            await _backgroundAnimationController.forward();
+          if (!userSnapshot.snapshot.exists) {
+            await AuthService.clearUserSession();
+            _navigateToWelcomeScreen();
+            return;
+          }
 
-            if (userRole == 'student') {
-              Navigator.pushReplacement(
-                context,
-                PageRouteBuilder(
-                  pageBuilder: (_, __, ___) => MainTabScreen(),
-                  transitionsBuilder: (_, animation, __, child) {
-                    return FadeTransition(opacity: animation, child: child);
-                  },
-                  transitionDuration: Duration(milliseconds: 500),
-                ),
-              );
-            } else if (userRole == 'librarian') {
-              Navigator.pushReplacement(
-                context,
-                PageRouteBuilder(
-                  pageBuilder: (_, __, ___) => LibrarianNavigationPage(),
-                  transitionsBuilder: (_, animation, __, child) {
-                    return FadeTransition(opacity: animation, child: child);
-                  },
-                  transitionDuration: Duration(milliseconds: 500),
-                ),
-              );
-            }
+          // User exists and is active, navigate to appropriate screen
+          if (userRole == 'student') {
+            _navigateToStudentHome();
+          } else if (userRole == 'librarian') {
+            _navigateToLibrarianHome();
+          }
+
+          return;
+        } catch (e) {
+          // If it's specifically a timeout error, we might want to proceed anyway
+          // but show a connectivity warning
+          if (e is TimeoutException) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text("Network is slow. Some features may be limited."),
+                duration: Duration(seconds: 3),
+                backgroundColor: Colors.orange,
+              ),
+            );
 
             return;
           }
-        } catch (e) {
-          // Handle database timeout or other errors
-          print("Database error: $e");
         }
       }
 
-      // Start exit animation
-      await _backgroundAnimationController.forward();
-
-      // If we get here, user is not logged in or session is invalid
-      Navigator.pushReplacement(
-        context,
-        PageRouteBuilder(
-          pageBuilder: (_, __, ___) => WelcomeScreen(),
-          transitionsBuilder: (_, animation, __, child) {
-            return FadeTransition(opacity: animation, child: child);
-          },
-          transitionDuration: Duration(milliseconds: 500),
-        ),
-      );
+      // If we get here, either:
+      // - User is not logged in
+      // - Session is invalid
+      // - Role is unknown
+      // - Other authentication error occurred
+      _navigateToWelcomeScreen();
     } catch (e) {
-      print("Error during login check: $e");
+      _navigateToWelcomeScreen();
+    } finally {}
+  }
 
-      // Start exit animation
-      await _backgroundAnimationController.forward();
+  // Helper method for welcome screen navigation
+  void _navigateToWelcomeScreen() async {
+    await _backgroundAnimationController.forward();
 
-      // Navigate to selection page on any error
-      Navigator.pushReplacement(
-        context,
-        PageRouteBuilder(
-          pageBuilder: (_, __, ___) => WelcomeScreen(),
-          transitionsBuilder: (_, animation, __, child) {
-            return FadeTransition(opacity: animation, child: child);
-          },
-          transitionDuration: Duration(milliseconds: 500),
-        ),
-      );
-    }
+    Navigator.pushReplacement(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => WelcomeScreen(),
+        transitionsBuilder: (_, animation, __, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+        transitionDuration: Duration(milliseconds: 500),
+      ),
+    );
+  }
+
+  // Helper method for student home navigation
+  void _navigateToStudentHome() async {
+    await _backgroundAnimationController.forward();
+
+    Navigator.pushReplacement(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => MainTabScreen(),
+        transitionsBuilder: (_, animation, __, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+        transitionDuration: Duration(milliseconds: 500),
+      ),
+    );
+  }
+
+  // Helper method for librarian home navigation
+  void _navigateToLibrarianHome() async {
+    await _backgroundAnimationController.forward();
+
+    Navigator.pushReplacement(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => LibrarianNavigationPage(),
+        transitionsBuilder: (_, animation, __, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+        transitionDuration: Duration(milliseconds: 500),
+      ),
+    );
   }
 
   @override
@@ -234,8 +284,6 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                         'assets/libtrack_logo.webp', // Make sure this is the path to your logo
                         width: double.infinity,
                       ),
-
-
                     ],
                   ),
                 ),

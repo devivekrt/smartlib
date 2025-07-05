@@ -13,7 +13,7 @@ import '../models/library_model.dart';
 import '../theme/theme.dart';
 import '../widgets/solid_button.dart';
 import '../librarian/bottom_navigation/librarain_navigation_page.dart';
-import '../function/library_submission_service.dart';
+import '../function/library_submission_function.dart';
 
 class UploadPictureScreen extends StatefulWidget {
   final LibraryModel libraryModel;

@@ -48,7 +48,9 @@ dependencies:
   firebase_messaging: ^15.2.7
   geocoding: ^2.1.0
   google_maps_flutter: ^2.3.0
+  gal: ^2.3.1
   shimmer: ^3.0.0
+  flutter_image_compress: ^2.4.0
 
     # QR Code Generation and Scanning
   qr_flutter: ^4.1.0          # For generating QR codes

@@ -669,7 +669,7 @@ class _QRScannerScreenState extends State<QRScannerScreen>
           'isCheckedIn': false,
           'checkOutTime': timeString,
           'status': 'checkedOut',
-          'studyDuration': studyHours,
+          'studyHours': studyHours,
         });
 
         for (String shiftId in shiftIds) {
@@ -722,8 +722,6 @@ class _QRScannerScreenState extends State<QRScannerScreen>
     String? checkInTime,
     String? checkOutTime,
     int? duration,
-    DateTime? shiftStartTime,
-    DateTime? shiftEndTime,
   }) async {
     try {
       // Create base attendance data object with common fields

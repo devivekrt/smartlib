@@ -10,6 +10,7 @@ import 'package:smartlib/widgets/solid_button.dart';
 import 'dart:math' show min, max;
 
 import '../data/string.dart';
+import '../function/listen_data.dart';
 import '../function/review_service.dart';
 import '../function/student_location.dart';
 import 'my_bookings_screen.dart' show MyBookingsScreen;
@@ -21,7 +22,7 @@ class LibraryMarketplace extends StatefulWidget {
   final bool isSignedUp;
 
   const LibraryMarketplace({Key? key, required this.isSignedUp})
-    : super(key: key);
+      : super(key: key);
 
   @override
   State<LibraryMarketplace> createState() => _LibraryMarketplaceState();
@@ -30,6 +31,13 @@ class LibraryMarketplace extends StatefulWidget {
 class _LibraryMarketplaceState extends State<LibraryMarketplace> {
   final _firestore = FirebaseFirestore.instance;
   final _database = FirebaseDatabase.instance;
+  // Add a reference to ListenData service
+  final _listenData = ListenData();
+  // Add reference to location service
+  final StudentLocationService _locationService = StudentLocationService();
+
+  // Store calculated distances
+  Map<String, double> _libraryDistances = {};
 
   // Tab control
   int _currentTabIndex = 0;
@@ -54,37 +62,56 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
   @override
   void initState() {
     super.initState();
+    _initializeLocationService();
     _fetchCurrentStatus().then((_) {
       _fetchLibraries();
     });
   }
 
-  // Fetch user's current status from Firebase
-  Future<void> _fetchCurrentStatus() async {
+  // Initialize location service
+  Future<void> _initializeLocationService() async {
     try {
-      final statusRef = _database.ref().child(
-        "users/students/${SmartLib.userId}/currentStatus",
-      );
+      await _locationService.initialize();
+      print("Location service initialized: ${_locationService.isLocationAvailable}");
+    } catch (e) {
+      print("Error initializing location service: $e");
+    }
+  }
 
-      final snapshot = await statusRef.get();
+  // Use ListenData to fetch user's current status
+  Future<void> _fetchCurrentStatus() async {
+    setState(() {
+      _isLoading = true;
+    });
 
-      if (snapshot.exists) {
-        final data = snapshot.value as Map<dynamic, dynamic>;
+    try {
+      // This will update SmartLib.currentStatus, etc. directly
+      await _listenData.getUserData();
 
-        setState(() {
-          _currentStatus = Map<String, dynamic>.from(data);
-          _isCheckedIntoLibrary = data['isCheckedIn'] == true;
-          _currentLibraryId = data['currentLibraryId']?.toString();
-        });
+      // Now we can just use the values from SmartLib
+      setState(() {
+        _isCheckedIntoLibrary = SmartLib.isCheckedIn == true;
+        _currentLibraryId = SmartLib.libraryId;
+
+        // Create a local copy of current status data for the UI
+        _currentStatus = {
+          'isCheckedIn': SmartLib.isCheckedIn,
+          'currentLibraryId': SmartLib.libraryId,
+          'currentSeatNo': SmartLib.seatNo,
+          'bookingId': SmartLib.bookingId,
+          'shiftName': SmartLib.shiftName,
+          'dueDate': SmartLib.dueDate,
+        };
 
         print("User checked into library: $_isCheckedIntoLibrary");
         print("Current library ID: $_currentLibraryId");
-      }
+      });
     } catch (e) {
       print("Error fetching current status: $e");
     }
   }
 
+  // Use ListenData to fetch libraries
   Future<void> _fetchLibraries() async {
     setState(() {
       _isLoading = true;
@@ -92,36 +119,80 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
     });
 
     try {
-      // Get all libraries
-      final libraryDocs = await _firestore.collection('libraries').get();
-      print("is library found $libraryDocs");
+      // Use the singleton location service to get student location
+      // Initialize the location service if not already done
+      await _locationService.initialize();
 
-      // Parse all libraries
+      double studentLat = 0.0;
+      double studentLon = 0.0;
+
+      // Check if location is available
+      if (_locationService.isLocationAvailable) {
+        // Get current location values
+        studentLat = _locationService.latitude!;
+        studentLon = _locationService.longitude!;
+
+        print('Using existing location: $studentLat, $studentLon');
+
+        // If location is stale, request an update
+        if (_locationService.isStale) {
+          print('Location is stale, requesting update');
+          final locationData = await _locationService.requestSingleLocationUpdate();
+
+          if (locationData != null) {
+            studentLat = locationData.latitude;
+            studentLon = locationData.longitude;
+            print('Updated to fresh location: $studentLat, $studentLon');
+          }
+        }
+      } else {
+        // If no location available, try to get a fresh one
+        print('No location available, requesting new location');
+        final locationData = await _locationService.requestSingleLocationUpdate();
+
+        if (locationData != null) {
+          studentLat = locationData.latitude;
+          studentLon = locationData.longitude;
+          print('Obtained new location: $studentLat, $studentLon');
+        } else {
+          print('Could not obtain location, using default coordinates');
+        }
+      }
+
+      // Get all libraries using ListenData service
+      final librariesData = await _listenData.getAllLibraries();
+
+      // Convert the raw data to LibraryModel objects
       _allLibraries =
-          libraryDocs.docs
-              .map((doc) => LibraryModel.fromMap(doc.data(), doc.id))
+          librariesData
+              .map((data) => LibraryModel.fromMap(data, data['id'] as String))
               .toList();
+
+      // Calculate and store distances for all libraries
+      if (_locationService.isLocationAvailable) {
+        _calculateDistancesForLibraries(_allLibraries);
+      }
 
       // Filter for joined libraries
       final joinedSnapshot =
-          await _database
-              .ref(
-                '${SmartLib.constPath}/students/${SmartLib.userId}/joinedLibraries',
-              )
-              .get();
+      await _database
+          .ref(
+        '${SmartLib.constPath}/students/${SmartLib.userId}/joinedLibraries',
+      )
+          .get();
 
       if (joinedSnapshot.exists) {
         final Map<dynamic, dynamic> joinedMap =
-            joinedSnapshot.value as Map<dynamic, dynamic>;
+        joinedSnapshot.value as Map<dynamic, dynamic>;
         final Set<String> joinedIds =
-            joinedMap.keys.map((key) => key.toString()).toSet();
+        joinedMap.keys.map((key) => key.toString()).toSet();
 
         _joinedLibraries =
             _allLibraries
                 .where(
                   (library) =>
-                      library.id != null && joinedIds.contains(library.id),
-                )
+              library.id != null && joinedIds.contains(library.id),
+            )
                 .toList();
 
         // Remove joined libraries from all libraries list
@@ -129,8 +200,8 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
             _allLibraries
                 .where(
                   (library) =>
-                      library.id != null && !joinedIds.contains(library.id),
-                )
+              library.id != null && !joinedIds.contains(library.id),
+            )
                 .toList();
       }
 
@@ -147,6 +218,62 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
     }
   }
 
+  // Calculate distances for all libraries
+  void _calculateDistancesForLibraries(List<LibraryModel> libraries) {
+    if (!_locationService.isLocationAvailable) return;
+
+    for (var library in libraries) {
+      if (library.id == null) continue;
+
+      final lat = double.tryParse(library.locationLatitude ?? '') ?? 0.0;
+      final lon = double.tryParse(library.locationLongitude ?? '') ?? 0.0;
+
+      if (lat != 0.0 && lon != 0.0) {
+        final distance = _locationService.calculateDistanceInKm(lat, lon);
+        if (distance != null) {
+          _libraryDistances[library.id!] = distance;
+        }
+      }
+    }
+  }
+
+  // Helper to get formatted location string with distance
+  String _getFormattedLocation(LibraryModel library) {
+    String locationText = "";
+
+    // Try to get city from address
+    if (library.address != null && library.address!['city'] != null) {
+      locationText = library.address!['city'].toString();
+    } else if (library.location != null && library.location!.isNotEmpty) {
+      locationText = library.location!;
+    } else {
+      locationText = 'No location info';
+    }
+
+    // Add distance if available
+    if (library.id != null && _libraryDistances.containsKey(library.id)) {
+      double distance = _libraryDistances[library.id]!;
+      String distanceText;
+
+      if (distance < 1.0) {
+        // If less than 1km, show in meters
+        final meters = (distance * 1000).round();
+        distanceText = '$meters m';
+      } else if (distance < 100) {
+        // Show with one decimal place if under 100km
+        distanceText = '${distance.toStringAsFixed(1)} km';
+      } else {
+        // Show as integer for large distances
+        distanceText = '${distance.round()} km';
+      }
+
+      // Combine location with distance
+      return "$locationText • $distanceText away";
+    }
+
+    return locationText;
+  }
+
   /// Leave library function with improved error handling and user experience
   Future<void> _leaveLibrary(LibraryModel library) async {
     // Prevent multiple simultaneous attempts
@@ -159,12 +286,12 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
     try {
       // First check current status in RTDB
       final statusSnapshot =
-          await _database
-              .ref()
-              .child(
-                "${SmartLib.constPath}/students/${SmartLib.userId}/currentStatus",
-              )
-              .get();
+      await _database
+          .ref()
+          .child(
+        "${SmartLib.constPath}/students/${SmartLib.userId}/currentStatus",
+      )
+          .get();
 
       if (statusSnapshot.exists) {
         final statusData = statusSnapshot.value as Map<dynamic, dynamic>?;
@@ -187,89 +314,89 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
         barrierDismissible: false,
         builder:
             (context) => AlertDialog(
-              backgroundColor: DarkColor.cardColor,
-              title: Text(
-                'Leave Library',
-                style: TextStyle(color: Colors.white),
+          backgroundColor: DarkColor.cardColor,
+          title: Text(
+            'Leave Library',
+            style: TextStyle(color: Colors.white),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Are you sure you want to leave ${library.libraryName}?',
+                style: TextStyle(color: Colors.white70),
               ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Are you sure you want to leave ${library.libraryName}?',
-                    style: TextStyle(color: Colors.white70),
-                  ),
-                  SizedBox(height: 16),
+              SizedBox(height: 16),
 
-                  // Show warning if user is checked in
-                  if (hasActiveBooking)
-                    Container(
-                      padding: EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.red.withOpacity(0.3)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+              // Show warning if user is checked in
+              if (hasActiveBooking)
+                Container(
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.red.withOpacity(0.3)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
                         children: [
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.warning_amber_rounded,
-                                color: Colors.amber,
-                              ),
-                              SizedBox(width: 8),
-                              Text(
-                                'You are checked in!',
-                                style: TextStyle(
-                                  color: Colors.amber,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
+                          Icon(
+                            Icons.warning_amber_rounded,
+                            color: Colors.amber,
                           ),
-                          SizedBox(height: 8),
+                          SizedBox(width: 8),
                           Text(
-                            'You need to check out from this library before leaving.',
-                            style: TextStyle(color: Colors.white70),
+                            'You are checked in!',
+                            style: TextStyle(
+                              color: Colors.amber,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ],
                       ),
-                    ),
-                ],
-              ),
-              actions: [
-                // Cancel button
-                TextButton(
-                  onPressed: () => Navigator.pop(context, 'cancel'),
-                  child: Text('Cancel', style: TextStyle(color: Colors.grey)),
+                      SizedBox(height: 8),
+                      Text(
+                        'You need to check out from this library before leaving.',
+                        style: TextStyle(color: Colors.white70),
+                      ),
+                    ],
+                  ),
                 ),
-
-                // If not checked in, show leave button
-                if (!hasActiveBooking)
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red,
-                      foregroundColor: Colors.white,
-                    ),
-                    onPressed: () => Navigator.pop(context, 'leave'),
-                    child: Text('Leave'),
-                  ),
-
-                // If checked in, show checkout navigation button
-                if (hasActiveBooking)
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.amber,
-                      foregroundColor: Colors.black,
-                    ),
-                    onPressed: () => Navigator.pop(context, 'checkout'),
-                    child: Text('Go to Check Out'),
-                  ),
-              ],
+            ],
+          ),
+          actions: [
+            // Cancel button
+            TextButton(
+              onPressed: () => Navigator.pop(context, 'cancel'),
+              child: Text('Cancel', style: TextStyle(color: Colors.grey)),
             ),
+
+            // If not checked in, show leave button
+            if (!hasActiveBooking)
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: () => Navigator.pop(context, 'leave'),
+                child: Text('Leave'),
+              ),
+
+            // If checked in, show checkout navigation button
+            if (hasActiveBooking)
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.amber,
+                  foregroundColor: Colors.black,
+                ),
+                onPressed: () => Navigator.pop(context, 'checkout'),
+                child: Text('Go to Check Out'),
+              ),
+          ],
+        ),
       );
 
       // Handle dialog result
@@ -284,7 +411,7 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
 
         case 'cancel':
         default:
-          // Do nothing
+        // Do nothing
           return;
       }
     } catch (e) {
@@ -320,11 +447,11 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
 
       // 1. Check for active bookings (another verification)
       final bookingsQuery =
-          await FirebaseFirestore.instance
-              .collection('seatBookings')
-              .where('studentId', isEqualTo: SmartLib.userId)
-              .where('status', whereIn: ['active', 'confirmed'])
-              .get();
+      await FirebaseFirestore.instance
+          .collection('seatBookings')
+          .where('studentId', isEqualTo: SmartLib.userId)
+          .where('status', whereIn: ['active', 'confirmed'])
+          .get();
 
       if (bookingsQuery.docs.isNotEmpty) {
         setState(() {
@@ -356,15 +483,16 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
       await _database
           .ref()
           .child(
-            "${SmartLib.constPath}/students/${SmartLib.userId}/joinedLibraries/${library.id}",
-          )
+        "${SmartLib.constPath}/students/${SmartLib.userId}/joinedLibraries/${library.id}",
+      )
           .remove();
 
       await _database
           .ref()
           .child(
         "${SmartLib.constPath}/students/${SmartLib.userId}/currentStatus",
-      ).remove();
+      )
+          .remove();
 
       // Update student count in library if this is a new student
       final libraryDocRef = FirebaseFirestore.instance
@@ -382,8 +510,6 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
       batch.delete(subscribersRef);
       // Execute the batch
       await batch.commit();
-
-
 
       // 5. Update our local lists
       setState(() {
@@ -449,28 +575,28 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
       ),
       builder:
           (context) => Container(
-            padding: EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  "Sort By",
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                SizedBox(height: 15),
-                _buildSortOption("Price: Low to High"),
-                _buildSortOption("Price: High to Low"),
-                _buildSortOption("Rating: High to Low"),
-                _buildSortOption("Most Reviews"),
-                _buildSortOption("Most Popular"),
-              ],
+        padding: EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "Sort By",
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
             ),
-          ),
+            SizedBox(height: 15),
+            _buildSortOption("Price: Low to High"),
+            _buildSortOption("Price: High to Low"),
+            _buildSortOption("Rating: High to Low"),
+            _buildSortOption("Most Reviews"),
+            _buildSortOption("Most Popular"),
+          ],
+        ),
+      ),
     );
   }
 
@@ -495,12 +621,12 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
       switch (option) {
         case "Price: Low to High":
           _filteredLibraries.sort(
-            (a, b) => (a.lowFee ?? 0).compareTo(b.lowFee ?? 0),
+                (a, b) => (a.lowFee ?? 0).compareTo(b.lowFee ?? 0),
           );
           break;
         case "Price: High to Low":
           _filteredLibraries.sort(
-            (a, b) => (b.lowFee ?? 0).compareTo(a.lowFee ?? 0),
+                (a, b) => (b.lowFee ?? 0).compareTo(a.lowFee ?? 0),
           );
           break;
         case "Rating: High to Low":
@@ -516,8 +642,7 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
     });
   }
 
-
-// Add these variables to your State class
+  // Add these variables to your State class
   bool _filterOpenNow = false;
   bool _filterNearby = false;
   bool _filter24x7 = false;
@@ -531,8 +656,10 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(15)),
       ),
-      builder: (context) => StatefulBuilder(
-        builder: (context, setModalState) => Container(
+      builder:
+          (context) => StatefulBuilder(
+        builder:
+            (context, setModalState) => Container(
           padding: EdgeInsets.all(20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -559,27 +686,22 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
                         _maxDistance = 10.0;
                       });
                     },
-                    child: Text("Reset", style: TextStyle(color: Colors.blue)),
+                    child: Text(
+                      "Reset",
+                      style: TextStyle(color: Colors.blue),
+                    ),
                   ),
                 ],
               ),
               SizedBox(height: 15),
 
               // Simple filter options
-              _buildFilterOption(
-                "Open Now",
-                _filterOpenNow,
-                    (value) {
-                  setModalState(() => _filterOpenNow = value);
-                },
-              ),
-              _buildFilterOption(
-                "24/7 Access",
-                _filter24x7,
-                    (value) {
-                  setModalState(() => _filter24x7 = value);
-                },
-              ),
+              _buildFilterOption("Open Now", _filterOpenNow, (value) {
+                setModalState(() => _filterOpenNow = value);
+              }),
+              _buildFilterOption("24/7 Access", _filter24x7, (value) {
+                setModalState(() => _filter24x7 = value);
+              }),
               _buildFilterOption(
                 "Top Rated (4+ stars)",
                 _filterTopRated,
@@ -600,10 +722,16 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
               // Only show distance slider when nearby is selected
               if (_filterNearby)
                 Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
                   child: Row(
                     children: [
-                      Text("Distance: ", style: TextStyle(color: Colors.white70)),
+                      Text(
+                        "Distance: ",
+                        style: TextStyle(color: Colors.white70),
+                      ),
                       Expanded(
                         child: Slider(
                           value: _maxDistance,
@@ -641,7 +769,11 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
     );
   }
 
-  Widget _buildFilterOption(String title, bool value, Function(bool) onChanged) {
+  Widget _buildFilterOption(
+      String title,
+      bool value,
+      Function(bool) onChanged,
+      ) {
     return Container(
       width: double.infinity,
       padding: EdgeInsets.symmetric(vertical: 10),
@@ -649,17 +781,13 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
         children: [
           Text(title, style: TextStyle(fontSize: 16, color: Colors.white70)),
           Spacer(),
-          Switch(
-            value: value,
-            onChanged: onChanged,
-            activeColor: Colors.blue,
-          ),
+          Switch(value: value, onChanged: onChanged, activeColor: Colors.blue),
         ],
       ),
     );
   }
 
-// Simple function to apply filters
+  // Simple function to apply filters
   void _applyFilters() {
     // Start with all libraries
     List<LibraryModel> filtered = [..._allLibraries];
@@ -669,8 +797,6 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
       filtered = filtered.where((lib) => _isLibraryOpen(lib)).toList();
     }
 
-
-
     if (_filterTopRated) {
       filtered = filtered.where((lib) => (lib.rating ?? 0) >= 4.0).toList();
     }
@@ -678,12 +804,13 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
     if (_filterNearby) {
       final locationService = StudentLocationService();
       if (locationService.isLocationAvailable) {
-        filtered = filtered.where((lib) {
-          final lat = double.tryParse(lib.locationLatitude ?? '') ?? 0.0;
-          final lng = double.tryParse(lib.locationLongitude ?? '') ?? 0.0;
-          final distance = locationService.calculateDistanceInKm(lat, lng);
-          return distance != null && distance <= _maxDistance;
-        }).toList();
+        filtered =
+            filtered.where((lib) {
+              final lat = double.tryParse(lib.locationLatitude ?? '') ?? 0.0;
+              final lng = double.tryParse(lib.locationLongitude ?? '') ?? 0.0;
+              final distance = locationService.calculateDistanceInKm(lat, lng);
+              return distance != null && distance <= _maxDistance;
+            }).toList();
       }
     }
 
@@ -694,45 +821,70 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
 
     // Show feedback
     int count = _filteredLibraries.length;
-    String message = count > 0
+    String message =
+    count > 0
         ? "Found $count matching libraries"
         : "No libraries match your filters";
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
-// Simple function to check if library is open
+  // Simple function to check if library is open
   bool _isLibraryOpen(LibraryModel library) {
     // Get current time and day
     final now = DateTime.now();
     final currentHour = now.hour;
-    final currentDay = now.weekday; // 1-7, Monday-Sunday
-
-
+    final currentMinute = now.minute;
+    final isWeekend = now.weekday == 6 || now.weekday == 7; // 6 = Saturday, 7 = Sunday
 
     // Check operating hours if available
     try {
-      final hours = library.openingHours;
-      if (hours != null) {
-        final todayHours = hours['day${currentDay}']; // day1, day2, etc.
-        if (todayHours != null) {
-          // Simple check: if current hour is within operating hours
-          final openHour = todayHours['open'];
-          final closeHour = todayHours['close'];
-          if (openHour != null && closeHour != null) {
-            // Handle overnight hours
-            if (closeHour < openHour) {
-              return currentHour >= openHour || currentHour < closeHour;
-            } else {
-              return currentHour >= openHour && currentHour < closeHour;
+      final openingHours = library.openingHours;
+      if (openingHours != null) {
+        // Check the appropriate key based on day of week
+        final String timeRangeKey = isWeekend ? 'sat-sun' : 'mon-fri';
+
+        if (openingHours.containsKey(timeRangeKey)) {
+          final timeRange = openingHours[timeRangeKey];
+
+          if (timeRange != null &&
+              timeRange['openTime'] != null &&
+              timeRange['closeTime'] != null) {
+
+            // Parse open time
+            final String openTimeStr = timeRange['openTime'].toString();
+            final List<String> openTimeParts = openTimeStr.split(':');
+            if (openTimeParts.length >= 2) {
+              final int openHour = int.tryParse(openTimeParts[0]) ?? 0;
+              final int openMinute = int.tryParse(openTimeParts[1]) ?? 0;
+
+              // Parse close time
+              final String closeTimeStr = timeRange['closeTime'].toString();
+              final List<String> closeTimeParts = closeTimeStr.split(':');
+              if (closeTimeParts.length >= 2) {
+                final int closeHour = int.tryParse(closeTimeParts[0]) ?? 0;
+                final int closeMinute = int.tryParse(closeTimeParts[1]) ?? 0;
+
+                // Convert to minutes since midnight for easier comparison
+                final int currentTimeMinutes = currentHour * 60 + currentMinute;
+                final int openTimeMinutes = openHour * 60 + openMinute;
+                final int closeTimeMinutes = closeHour * 60 + closeMinute;
+
+                // Handle overnight hours (when closing time is earlier than opening time)
+                if (closeTimeMinutes < openTimeMinutes) {
+                  return currentTimeMinutes >= openTimeMinutes || currentTimeMinutes < closeTimeMinutes;
+                } else {
+                  return currentTimeMinutes >= openTimeMinutes && currentTimeMinutes < closeTimeMinutes;
+                }
+              }
             }
           }
         }
       }
     } catch (e) {
-      print('[2025-06-29 10:51:06] devivekrt: Error checking library hours: $e');
+      print('Error checking if library is open: $e');
     }
 
     // Default to closed if we can't determine
@@ -776,65 +928,65 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
         context: context,
         builder:
             (context) => AlertDialog(
-              backgroundColor: DarkColor.cardColor,
-              title: Text(
-                'Already Checked In',
-                style: TextStyle(color: Colors.white),
+          backgroundColor: DarkColor.cardColor,
+          title: Text(
+            'Already Checked In',
+            style: TextStyle(color: Colors.white),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'You are currently checked in to $currentLibraryName.',
+                style: TextStyle(color: Colors.white70),
               ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'You are currently checked in to $currentLibraryName.',
-                    style: TextStyle(color: Colors.white70),
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    'You need to check out from your current library before booking a seat at ${library.libraryName}.',
-                    style: TextStyle(color: Colors.white70),
-                  ),
-                  SizedBox(height: 16),
-                  Container(
-                    padding: EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.amber.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.amber.withOpacity(0.3)),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.info_outline, color: Colors.amber),
-                        SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            'You can check out by scanning the QR code at your current library or using the My Bookings screen.',
-                            style: TextStyle(color: Colors.amber),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+              SizedBox(height: 8),
+              Text(
+                'You need to check out from your current library before booking a seat at ${library.libraryName}.',
+                style: TextStyle(color: Colors.white70),
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: Text('Cancel', style: TextStyle(color: Colors.grey)),
+              SizedBox(height: 16),
+              Container(
+                padding: EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.amber.withOpacity(0.3)),
                 ),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.amber,
-                    foregroundColor: Colors.black,
-                  ),
-                  onPressed: () {
-                    // Here you could navigate to the bookings page
-                    Navigator.pop(context);
-                  },
-                  child: Text('My Bookings'),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.amber),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'You can check out by scanning the QR code at your current library or using the My Bookings screen.',
+                        style: TextStyle(color: Colors.amber),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Cancel', style: TextStyle(color: Colors.grey)),
             ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.amber,
+                foregroundColor: Colors.black,
+              ),
+              onPressed: () {
+                // Here you could navigate to the bookings page
+                Navigator.pop(context);
+              },
+              child: Text('My Bookings'),
+            ),
+          ],
+        ),
       );
       return;
     }
@@ -845,10 +997,10 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
       MaterialPageRoute(
         builder:
             (context) => LibraryDetailScreen(
-              library: library,
-              isJoined: _joinedLibraries.contains(library),
-              isSignedUp: widget.isSignedUp, // Pass isSignedUp parameter
-            ),
+          library: library,
+          isJoined: _joinedLibraries.contains(library),
+          isSignedUp: widget.isSignedUp, // Pass isSignedUp parameter
+        ),
       ),
     ).then((result) {
       // Refresh data if needed
@@ -901,10 +1053,14 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
                 child: SolidButton(
                   text: "Book Later",
                   onPressed: () {
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(builder: (context) => MainTabScreen()),
-                    );
+                    //remove previous page
+                    Navigator.pushAndRemoveUntil(context, PageRouteBuilder(
+                      pageBuilder: (_, __, ___) => MainTabScreen(),
+                      transitionsBuilder: (_, animation, __, child) {
+                        return FadeTransition(opacity: animation, child: child);
+                      },
+                      transitionDuration: Duration(milliseconds: 500),
+                    ), (route) => false);
                   },
                   width: double.infinity,
                 ),
@@ -943,13 +1099,13 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
                             });
                           },
                           buttonColor:
-                              _currentTabIndex == 0
-                                  ? DarkColor.primary
-                                  : Colors.transparent,
+                          _currentTabIndex == 0
+                              ? DarkColor.primary
+                              : Colors.transparent,
                           borderColor:
-                              _currentTabIndex == 0
-                                  ? Colors.transparent
-                                  : DarkColor.primary,
+                          _currentTabIndex == 0
+                              ? Colors.transparent
+                              : DarkColor.primary,
                           width: double.infinity,
                           height: 50,
                         ),
@@ -965,13 +1121,13 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
                             });
                           },
                           buttonColor:
-                              _currentTabIndex == 1
-                                  ? DarkColor.primary
-                                  : Colors.transparent,
+                          _currentTabIndex == 1
+                              ? DarkColor.primary
+                              : Colors.transparent,
                           borderColor:
-                              _currentTabIndex == 1
-                                  ? Colors.transparent
-                                  : DarkColor.primary,
+                          _currentTabIndex == 1
+                              ? Colors.transparent
+                              : DarkColor.primary,
                           width: double.infinity,
                           height: 50,
                         ),
@@ -987,30 +1143,30 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
             // Library content based on tab - always show the Find tab if just signed up
             Expanded(
               child:
-                  _isLoading
-                      ? Center(child: CircularProgressIndicator())
-                      : _errorMessage.isNotEmpty
-                      ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              _errorMessage,
-                              style: TextStyle(color: Colors.white70),
-                              textAlign: TextAlign.center,
-                            ),
-                            SizedBox(height: 16),
-                            TextButton.icon(
-                              onPressed: _fetchLibraries,
-                              icon: Icon(Icons.refresh),
-                              label: Text('Try Again'),
-                            ),
-                          ],
-                        ),
-                      )
-                      : _currentTabIndex == 0 || widget.isSignedUp
-                      ? _buildFindTab()
-                      : _buildJoinedTab(),
+              _isLoading
+                  ? Center(child: CircularProgressIndicator())
+                  : _errorMessage.isNotEmpty
+                  ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      _errorMessage,
+                      style: TextStyle(color: Colors.white70),
+                      textAlign: TextAlign.center,
+                    ),
+                    SizedBox(height: 16),
+                    TextButton.icon(
+                      onPressed: _fetchLibraries,
+                      icon: Icon(Icons.refresh),
+                      label: Text('Try Again'),
+                    ),
+                  ],
+                ),
+              )
+                  : _currentTabIndex == 0 || widget.isSignedUp
+                  ? _buildFindTab()
+                  : _buildJoinedTab(),
             ),
           ],
         ),
@@ -1182,7 +1338,7 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
 
         final reviewableLibraries =
             snapshot.data?.where((lib) => lib.canReview ?? false).toList() ??
-            [];
+                [];
 
         // If no reviewable libraries, just show regular list
         if (reviewableLibraries.isEmpty) {
@@ -1297,22 +1453,22 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
                             shape: BoxShape.circle,
                             color: Colors.white.withOpacity(0.2),
                             image:
-                                library.libraryImageUrl != null
-                                    ? DecorationImage(
-                                      image: NetworkImage(
-                                        library.libraryImageUrl!,
-                                      ),
-                                      fit: BoxFit.cover,
-                                    )
-                                    : null,
+                            library.libraryImageUrl != null
+                                ? DecorationImage(
+                              image: NetworkImage(
+                                library.libraryImageUrl!,
+                              ),
+                              fit: BoxFit.cover,
+                            )
+                                : null,
                           ),
                           child:
-                              library.libraryImageUrl == null
-                                  ? Icon(
-                                    Icons.library_books,
-                                    color: Colors.white,
-                                  )
-                                  : null,
+                          library.libraryImageUrl == null
+                              ? Icon(
+                            Icons.library_books,
+                            color: Colors.white,
+                          )
+                              : null,
                         ),
                         SizedBox(height: 8),
                         Text(
@@ -1382,9 +1538,9 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
                                 ? Icons.star
                                 : Icons.star_border,
                             color:
-                                index < rating.round()
-                                    ? Colors.amber
-                                    : Colors.grey,
+                            index < rating.round()
+                                ? Colors.amber
+                                : Colors.grey,
                             size: 36,
                           ),
                           onPressed: () {
@@ -1441,72 +1597,72 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
                 ),
                 isSubmitting
                     ? Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
                     : ElevatedButton(
-                      onPressed:
-                          rating <= 0
-                              ? null
-                              : () async {
-                                setState(() {
-                                  isSubmitting = true;
-                                });
+                  onPressed:
+                  rating <= 0
+                      ? null
+                      : () async {
+                    setState(() {
+                      isSubmitting = true;
+                    });
 
-                                final ReviewService _reviewService =
-                                    ReviewService();
-                                final success = await _reviewService
-                                    .submitReview(
-                                      libraryId: library.id!,
-                                      rating: rating,
-                                      feedback: feedbackController.text,
-                                    );
+                    final ReviewService _reviewService =
+                    ReviewService();
+                    final success = await _reviewService
+                        .submitReview(
+                      libraryId: library.id!,
+                      rating: rating,
+                      feedback: feedbackController.text,
+                    );
 
-                                if (success) {
-                                  Navigator.pop(context);
+                    if (success) {
+                      Navigator.pop(context);
 
-                                  // Refresh the joined libraries list
-                                  this.setState(() {
-                                    // Mark this library as reviewed
-                                    for (var lib in _joinedLibraries) {
-                                      if (lib.id == library.id) {
-                                        lib.canReview = false;
-                                      }
-                                    }
-                                  });
+                      // Refresh the joined libraries list
+                      this.setState(() {
+                        // Mark this library as reviewed
+                        for (var lib in _joinedLibraries) {
+                          if (lib.id == library.id) {
+                            lib.canReview = false;
+                          }
+                        }
+                      });
 
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        'Thank you for your review!',
-                                      ),
-                                      backgroundColor: Colors.green,
-                                    ),
-                                  );
-                                } else {
-                                  setState(() {
-                                    isSubmitting = false;
-                                  });
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'Thank you for your review!',
+                          ),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    } else {
+                      setState(() {
+                        isSubmitting = false;
+                      });
 
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        'Failed to submit review. Please try again.',
-                                      ),
-                                      backgroundColor: Colors.red,
-                                    ),
-                                  );
-                                }
-                              },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: DarkColor.highlightColor,
-                        foregroundColor: Colors.white,
-                      ),
-                      child: Text('Submit Review'),
-                    ),
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'Failed to submit review. Please try again.',
+                          ),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: DarkColor.highlightColor,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: Text('Submit Review'),
+                ),
               ],
             );
           },
@@ -1548,7 +1704,6 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
     );
   }
 
-  // New method for building joined library cards with "Leave" button
   Widget _buildJoinedLibraryCard(LibraryModel library) {
     final color = _getColorForLibrary(library);
     final availableSeats = library.availableSeats ?? 0;
@@ -1557,17 +1712,6 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
     // Check if this is the library the user is currently checked into
     final isCurrentLibrary =
         _isCheckedIntoLibrary && _currentLibraryId == library.id;
-
-    // Function to safely get address or location
-    String getLocation() {
-      if (library.address != null) {
-        final address = library.address!;
-        if (address['city'] != null) {
-          return address['city'].toString();
-        }
-      }
-      return library.location ?? 'No location';
-    }
 
     return GestureDetector(
       onTap: () => navigateToLibraryDetail(library),
@@ -1578,9 +1722,9 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color:
-                isCurrentLibrary
-                    ? Colors.green.withOpacity(0.5)
-                    : color.withOpacity(0.3),
+            isCurrentLibrary
+                ? Colors.green.withOpacity(0.5)
+                : color.withOpacity(0.3),
             width: isCurrentLibrary ? 2 : 1,
           ),
           boxShadow: [
@@ -1629,17 +1773,17 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
                               // Image or placeholder
                               library.libraryImageUrl != null
                                   ? Image.network(
-                                    library.libraryImageUrl!,
-                                    fit: BoxFit.cover,
-                                  )
+                                library.libraryImageUrl!,
+                                fit: BoxFit.cover,
+                              )
                                   : Container(
-                                    color: color.withOpacity(0.3),
-                                    child: Icon(
-                                      Icons.apartment,
-                                      color: color,
-                                      size: 30,
-                                    ),
-                                  ),
+                                color: color.withOpacity(0.3),
+                                child: Icon(
+                                  Icons.apartment,
+                                  color: color,
+                                  size: 30,
+                                ),
+                              ),
 
                               // Gradient overlay for better text contrast
                               Positioned(
@@ -1672,9 +1816,9 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
                                   ),
                                   decoration: BoxDecoration(
                                     color:
-                                        isOpen
-                                            ? Colors.green.withOpacity(0.8)
-                                            : Colors.red.withOpacity(0.8),
+                                    isOpen
+                                        ? Colors.green.withOpacity(0.8)
+                                        : Colors.red.withOpacity(0.8),
                                     borderRadius: BorderRadius.circular(10),
                                   ),
                                   child: Text(
@@ -1699,9 +1843,9 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
                                   ),
                                   decoration: BoxDecoration(
                                     color:
-                                        isCurrentLibrary
-                                            ? Colors.green.withOpacity(0.8)
-                                            : Colors.blue.withOpacity(0.8),
+                                    isCurrentLibrary
+                                        ? Colors.green.withOpacity(0.8)
+                                        : Colors.blue.withOpacity(0.8),
                                     borderRadius: BorderRadius.circular(10),
                                   ),
                                   child: Row(
@@ -1756,9 +1900,9 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
                                       fontWeight: FontWeight.bold,
                                       fontSize: 17,
                                       color:
-                                          isCurrentLibrary
-                                              ? Colors.green
-                                              : Colors.white,
+                                      isCurrentLibrary
+                                          ? Colors.green
+                                          : Colors.white,
                                     ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
@@ -1792,19 +1936,22 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
                               ],
                             ),
 
-                            // Location
+                            // Location with distance
                             SizedBox(height: 6),
                             Row(
                               children: [
+                                // Use distance icon if distance is available
                                 Icon(
-                                  Icons.location_on_outlined,
+                                  _libraryDistances.containsKey(library.id)
+                                      ? Icons.directions
+                                      : Icons.location_on_outlined,
                                   color: Colors.white.withOpacity(0.8),
                                   size: 14,
                                 ),
                                 SizedBox(width: 4),
                                 Expanded(
                                   child: Text(
-                                    getLocation(),
+                                    _getFormattedLocation(library),
                                     style: TextStyle(
                                       color: Colors.white.withOpacity(0.8),
                                       fontSize: 13,
@@ -1841,8 +1988,6 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
                                 ),
                               ),
                             ],
-
-                            // Utilities as chips - removed to make space
                           ],
                         ),
                       ),
@@ -1878,14 +2023,14 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
                           ),
                           label: Text(isCurrentLibrary ? "Check Out" : "Leave"),
                           onPressed:
-                              _isLeavingLibrary || isCurrentLibrary
-                                  ? null // Disable if currently leaving or checked in
-                                  : () => _leaveLibrary(library),
+                          _isLeavingLibrary || isCurrentLibrary
+                              ? null // Disable if currently leaving or checked in
+                              : () => _leaveLibrary(library),
                           style: ElevatedButton.styleFrom(
                             backgroundColor:
-                                isCurrentLibrary
-                                    ? Colors.amber
-                                    : Colors.red.shade700,
+                            isCurrentLibrary
+                                ? Colors.amber
+                                : Colors.red.shade700,
                             foregroundColor: Colors.white,
                             disabledBackgroundColor: Colors.grey.shade800,
                             disabledForegroundColor: Colors.grey,
@@ -1911,17 +2056,6 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
     final totalSeats = library.totalSeats ?? 1;
     final isOpen = (availableSeats > 0);
     final isPopular = (library.students ?? 0) > 20; // Just an example threshold
-
-    // Function to safely get address or location
-    String getLocation() {
-      if (library.address != null) {
-        final address = library.address!;
-        if (address['city'] != null) {
-          return address['city'].toString();
-        }
-      }
-      return library.location ?? 'No location';
-    }
 
     // Check if user is checked into any library
     final canBookNewSeat =
@@ -1951,23 +2085,23 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
                     color: color.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(10),
                     image:
-                        library.libraryImageUrl != null
-                            ? DecorationImage(
-                              image: NetworkImage(library.libraryImageUrl!),
-                              fit: BoxFit.cover,
-                            )
-                            : null,
+                    library.libraryImageUrl != null
+                        ? DecorationImage(
+                      image: NetworkImage(library.libraryImageUrl!),
+                      fit: BoxFit.cover,
+                    )
+                        : null,
                   ),
                   child:
-                      library.libraryImageUrl == null
-                          ? Center(
-                            child: Icon(
-                              Icons.apartment,
-                              color: color,
-                              size: 25,
-                            ),
-                          )
-                          : null,
+                  library.libraryImageUrl == null
+                      ? Center(
+                    child: Icon(
+                      Icons.apartment,
+                      color: color,
+                      size: 25,
+                    ),
+                  )
+                      : null,
                 ),
                 SizedBox(width: 15),
                 Expanded(
@@ -1993,15 +2127,18 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
                       SizedBox(height: 5),
                       Row(
                         children: [
+                          // Use distance icon if distance is available
                           Icon(
-                            Icons.location_on_outlined,
+                            _libraryDistances.containsKey(library.id)
+                                ? Icons.directions
+                                : Icons.location_on_outlined,
                             color: Colors.white.withOpacity(0.7),
                             size: 14,
                           ),
                           SizedBox(width: 5),
                           Expanded(
                             child: Text(
-                              getLocation(),
+                              _getFormattedLocation(library),
                               style: TextStyle(
                                 color: Colors.white.withOpacity(0.7),
                                 fontSize: 13,
@@ -2027,9 +2164,9 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
                   padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
                     color:
-                        isOpen
-                            ? Colors.green.withOpacity(0.2)
-                            : Colors.red.withOpacity(0.2),
+                    isOpen
+                        ? Colors.green.withOpacity(0.2)
+                        : Colors.red.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
@@ -2207,36 +2344,36 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
                   padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                   decoration: BoxDecoration(
                     color:
-                        (_isJoiningLibrary || !canBookNewSeat)
-                            ? color.withOpacity(0.5)
-                            : color,
+                    (_isJoiningLibrary || !canBookNewSeat)
+                        ? color.withOpacity(0.5)
+                        : color,
                     borderRadius: BorderRadius.circular(30),
                   ),
                   child: InkWell(
                     onTap:
-                        canBookNewSeat && !_isJoiningLibrary
-                            ? () => navigateToLibraryDetail(library)
-                            : null,
+                    canBookNewSeat && !_isJoiningLibrary
+                        ? () => navigateToLibraryDetail(library)
+                        : null,
                     child: Center(
                       child:
-                          _isJoiningLibrary
-                              ? SizedBox(
-                                height: 16,
-                                width: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                              : Text(
-                                canBookNewSeat
-                                    ? "Book a Seat"
-                                    : "Check Out First",
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
+                      _isJoiningLibrary
+                          ? SizedBox(
+                        height: 16,
+                        width: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                          : Text(
+                        canBookNewSeat
+                            ? "Book a Seat"
+                            : "Check Out First",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -2249,17 +2386,17 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
   }
 
   Widget _buildProgressBar(
-    double containerWidth,
-    int available,
-    int total,
-    Color color,
-  ) {
+      double containerWidth,
+      int available,
+      int total,
+      Color color,
+      ) {
     // Prevent division by zero and ensure ratio is between 0 and 1
     final double ratio = total <= 0 ? 0.0 : min(1.0, available / max(1, total));
 
     // Explicitly convert to double and clamp width to prevent overflow
     final double barWidth =
-        min(containerWidth, max(0.0, containerWidth * ratio)).toDouble();
+    min(containerWidth, max(0.0, containerWidth * ratio)).toDouble();
 
     return Container(
       height: 6,
@@ -2382,4 +2519,11 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
     _searchController.dispose();
     super.dispose();
   }
+}
+
+// Helper class for library distance data
+class _LibraryWithDistance {
+  final LibraryModel library;
+  final double distanceKm;
+  _LibraryWithDistance({required this.library, required this.distanceKm});
 }

@@ -55,7 +55,7 @@ class SmartLib {
   static String shiftFee = "";
   static String tag = "";
   static String userName = "";
-  static String address = "";
+  static int streak = 0;
   static String city = "";
   static String availableSeats = "";
   static String totalSeats = "";
@@ -80,6 +80,8 @@ class SmartLib {
   static List<Map<String, dynamic>> allSubscriberList = [];
   //store all seat booking list
   static List<Map<String, dynamic>> allSeatBookingList = [];
+  static Map<String, dynamic> contactMap = {};
+  static Map<String, dynamic> addressMap = {};
 
 }
 class LibraryData{

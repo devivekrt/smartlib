@@ -33,35 +33,7 @@ class ListenData {
 
   // MARK: - Public Methods
 
-  /// Initialize the ListenData system
-  Future<void> initialize() async {
-    try {
-      // Monitor connectivity changes
-      Connectivity().onConnectivityChanged.listen((result) {
-        final wasOnline = _isOnline;
-        _isOnline = result != ConnectivityResult.none;
 
-        if (!wasOnline && _isOnline) {
-          print("🔄 Connection restored - refreshing data");
-          getUserData();
-        }
-      });
-
-      // Check initial connection
-      final connectivityResult = await Connectivity().checkConnectivity();
-      _isOnline = connectivityResult != ConnectivityResult.none;
-
-      // Load cached data first
-      await _loadCachedData();
-
-      // Then get fresh data if online
-      if (_isOnline) {
-        await getUserData();
-      }
-    } catch (e) {
-      print("❌ Error initializing ListenData: $e");
-    }
-  }
 
   /// Set up listeners based on the user's role
   Future<void> getUserData() async {
@@ -70,7 +42,6 @@ class ListenData {
       String? userRole = await AuthService.getUserRole();
 
       if (userId == null || userRole == null) {
-        print("⚠️ No authenticated user found");
         return;
       }
 
@@ -91,7 +62,6 @@ class ListenData {
         _setupLibrarianListeners();
       }
     } catch (e) {
-      print("❌ Error in getUserData: $e");
     }
   }
 
@@ -102,9 +72,8 @@ class ListenData {
         subscription.cancel();
       });
       _subscriptions.clear();
-      print("🧹 All listeners disposed");
     } catch (e) {
-      print("❌ Error disposing listeners: $e");
+
     }
   }
 
@@ -123,18 +92,250 @@ class ListenData {
       _memoryCache.clear();
       _cacheTimes.clear();
 
-      print("🧹 Cache cleared successfully");
     } catch (e) {
-      print("❌ Error clearing cache: $e");
     }
   }
 
   // MARK: - Data Fetch Methods
 
-  /// Get all subscribers for the current library
-  Future<List<Map<String, dynamic>>> getSubscribers() async {
+
+
+  /// Get attendance records for a specific date and student
+  Future<List<Map<String, dynamic>>> getAttendanceRecordsForDate(
+      String date, String studentId) async {
+    if (date.isEmpty || studentId.isEmpty) {
+      return [];
+    }
+
+    final cacheKey = 'attendance_${date}_${studentId}';
+
+    // Return cached data if valid and offline
+    if (_isCacheValid(cacheKey) && !_isOnline) {
+      final cachedData = _memoryCache[cacheKey];
+      if (cachedData != null) {
+        return List<Map<String, dynamic>>.from(cachedData);
+      }
+      return [];
+    }
+
+    try {
+      final snapshot = await _firestore
+          .collection('attendance')
+          .doc(date)
+          .collection('records')
+          .where('studentId', isEqualTo: studentId)
+
+          .get();
+
+      final attendanceRecords = <Map<String, dynamic>>[];
+
+      for (var doc in snapshot.docs) {
+        final recordData = doc.data();
+        final recordId = doc.id;
+        recordData['id'] = recordId;
+
+        // Process timestamps
+        if (recordData['timestamp'] != null) {
+          try {
+            recordData['timestampDateTime'] =
+                (recordData['timestamp'] as Timestamp).toDate().toString();
+          } catch (e) {
+          }
+        }
+
+        attendanceRecords.add(recordData);
+      }
+
+      // Cache the results
+      await _cacheData(cacheKey, attendanceRecords);
+
+      return attendanceRecords;
+    } catch (e) {
+
+      // Return cached data on error if available
+      final cachedData = _memoryCache[cacheKey];
+      if (cachedData != null) {
+        return List<Map<String, dynamic>>.from(cachedData);
+      }
+
+      return [];
+    }
+  }
+
+  /// Get all libraries data
+  Future<List<Map<String, dynamic>>> getAllLibraries() async {
+    final cacheKey = 'all_libraries';
+
+    // Return cached data if valid and offline
+    if (_isCacheValid(cacheKey) && !_isOnline) {
+      final cachedData = _memoryCache[cacheKey];
+      if (cachedData != null) {
+        return List<Map<String, dynamic>>.from(cachedData);
+      }
+      return [];
+    }
+
+    try {
+      final snapshot = await _firestore
+          .collection('libraries')
+          .orderBy('libraryName')
+          .get();
+
+      final allLibraries = <Map<String, dynamic>>[];
+
+      for (var doc in snapshot.docs) {
+        final libraryData = doc.data();
+        final libraryId = doc.id;
+        libraryData['id'] = libraryId;
+        allLibraries.add(libraryData);
+      }
+
+      // Cache the results
+      await _cacheData(cacheKey, allLibraries);
+
+      // Update SmartLib
+      SmartLib.allLibraryList = allLibraries;
+
+      return allLibraries;
+    } catch (e) {
+
+      // Return cached data on error if available
+      final cachedData = _memoryCache[cacheKey];
+      if (cachedData != null) {
+        return List<Map<String, dynamic>>.from(cachedData);
+      }
+
+      return [];
+    }
+  }
+
+  /// Get seat bookings for a specific library
+  Future<List<Map<String, dynamic>>> getSeatBookingsForLibrary() async {
     if (SmartLib.libraryId.isEmpty) {
-      print("⚠️ Cannot get subscribers: libraryId is empty");
+      return [];
+    }
+
+    final cacheKey = 'seat_bookings_${SmartLib.libraryId}';
+
+    // Return cached data if valid and offline
+    if (_isCacheValid(cacheKey) && !_isOnline) {
+      final cachedData = _memoryCache[cacheKey];
+      if (cachedData != null) {
+        return List<Map<String, dynamic>>.from(cachedData);
+      }
+      return [];
+    }
+
+    try {
+      final snapshot = await _firestore
+          .collection('seatBookings')
+          .where('libraryId', isEqualTo: SmartLib.libraryId)
+          .get();
+
+      final seatBookings = <Map<String, dynamic>>[];
+
+      for (var doc in snapshot.docs) {
+        final bookingData = doc.data();
+        final bookingId = doc.id;
+        bookingData['id'] = bookingId;
+        // Process timestamps
+        if (bookingData['createdAt'] != null) {
+          try {
+            bookingData['createdAtDateTime'] =
+                (bookingData['createdAt'] as Timestamp).toDate().toString();
+          } catch (e) {
+          }
+        }
+
+
+
+        seatBookings.add(bookingData);
+      }
+
+      // Cache the results
+      await _cacheData(cacheKey, seatBookings);
+
+      // Update SmartLib
+      SmartLib.allSeatBookingList = seatBookings;
+
+      return seatBookings;
+    } catch (e) {
+
+      // Return cached data on error if available
+      final cachedData = _memoryCache[cacheKey];
+      if (cachedData != null) {
+        return List<Map<String, dynamic>>.from(cachedData);
+      }
+
+      return [];
+    }
+  }
+
+  /// Get attendance records for a specific library on a specific date
+  Future<List<Map<String, dynamic>>> getAttendanceRecordsForLibrary(
+      String date) async {
+    if (SmartLib.libraryId.isEmpty || date.isEmpty) {
+      return [];
+    }
+
+    final cacheKey = 'attendance_lib_${SmartLib.libraryId}_${date}';
+
+    // Return cached data if valid and offline
+    if (_isCacheValid(cacheKey) && !_isOnline) {
+      final cachedData = _memoryCache[cacheKey];
+      if (cachedData != null) {
+        return List<Map<String, dynamic>>.from(cachedData);
+      }
+      return [];
+    }
+
+    try {
+      final snapshot = await _firestore
+          .collection('attendance')
+          .doc(date)
+          .collection('records')
+          .where('libraryId', isEqualTo: SmartLib.libraryId)
+          .orderBy('timestamp', descending: true)
+          .get();
+
+      final attendanceRecords = <Map<String, dynamic>>[];
+
+      for (var doc in snapshot.docs) {
+        final recordData = doc.data();
+        final recordId = doc.id;
+        recordData['id'] = recordId;
+
+        // Process timestamps
+        if (recordData['timestamp'] != null) {
+          try {
+            recordData['timestampDateTime'] =
+                (recordData['timestamp'] as Timestamp).toDate().toString();
+          } catch (e) {
+          }
+        }
+
+        attendanceRecords.add(recordData);
+      }
+
+      // Cache the results
+      await _cacheData(cacheKey, attendanceRecords);
+
+      return attendanceRecords;
+    } catch (e) {
+
+      // Return cached data on error if available
+      final cachedData = _memoryCache[cacheKey];
+      if (cachedData != null) {
+        return List<Map<String, dynamic>>.from(cachedData);
+      }
+
+      return [];
+    }
+  }
+
+  ///get all subcribers for a specific library
+  Future<List<Map<String, dynamic>>> getAllSubscribers() async {
+    if (SmartLib.libraryId.isEmpty) {
       return [];
     }
 
@@ -142,7 +343,6 @@ class ListenData {
 
     // Return cached data if valid and offline
     if (_isCacheValid(cacheKey) && !_isOnline) {
-      print("💾 Using cached subscriber list");
       final cachedData = _memoryCache[cacheKey];
       if (cachedData != null) {
         return List<Map<String, dynamic>>.from(cachedData);
@@ -164,15 +364,6 @@ class ListenData {
         final subscriberId = doc.id;
         subscriberData['id'] = subscriberId;
 
-        // Process timestamps
-        if (subscriberData['joinedAt'] != null) {
-          try {
-            subscriberData['joinedAtDateTime'] =
-                (subscriberData['joinedAt'] as Timestamp).toDate().toString();
-          } catch (e) {
-            print("⚠️ Error converting joinedAt timestamp: $e");
-          }
-        }
 
         allSubscribers.add(subscriberData);
       }
@@ -182,246 +373,6 @@ class ListenData {
 
       return allSubscribers;
     } catch (e) {
-      print("❌ Error fetching subscribers: $e");
-
-      // Return cached data on error if available
-      final cachedData = _memoryCache[cacheKey];
-      if (cachedData != null) {
-        return List<Map<String, dynamic>>.from(cachedData);
-      }
-
-      return [];
-    }
-  }
-
-  /// Get attendance records for a specific date and student
-  Future<List<Map<String, dynamic>>> getAttendanceRecordsForDate(
-      String date, String studentId) async {
-    if (date.isEmpty || studentId.isEmpty) {
-      print("⚠️ Cannot get attendance records: date or studentId is empty");
-      return [];
-    }
-
-    final cacheKey = 'attendance_${date}_${studentId}';
-
-    // Return cached data if valid and offline
-    if (_isCacheValid(cacheKey) && !_isOnline) {
-      print("💾 Using cached attendance records");
-      final cachedData = _memoryCache[cacheKey];
-      if (cachedData != null) {
-        return List<Map<String, dynamic>>.from(cachedData);
-      }
-      return [];
-    }
-
-    try {
-      final snapshot = await _firestore
-          .collection('attendance')
-          .doc(date)
-          .collection('records')
-          .where('studentId', isEqualTo: studentId)
-          .get();
-
-      final attendanceRecords = <Map<String, dynamic>>[];
-
-      for (var doc in snapshot.docs) {
-        final recordData = doc.data();
-        final recordId = doc.id;
-        recordData['id'] = recordId;
-
-        // Process timestamps
-        if (recordData['timestamp'] != null) {
-          try {
-            recordData['timestampDateTime'] =
-                (recordData['timestamp'] as Timestamp).toDate().toString();
-          } catch (e) {
-            print("⚠️ Error converting timestamp: $e");
-          }
-        }
-
-        attendanceRecords.add(recordData);
-      }
-
-      // Cache the results
-      await _cacheData(cacheKey, attendanceRecords);
-
-      return attendanceRecords;
-    } catch (e) {
-      print("❌ Error fetching attendance records: $e");
-
-      // Return cached data on error if available
-      final cachedData = _memoryCache[cacheKey];
-      if (cachedData != null) {
-        return List<Map<String, dynamic>>.from(cachedData);
-      }
-
-      return [];
-    }
-  }
-
-  /// Get all libraries data
-  Future<List<Map<String, dynamic>>> getAllLibraries() async {
-    final cacheKey = 'all_libraries';
-
-    // Return cached data if valid and offline
-    if (_isCacheValid(cacheKey) && !_isOnline) {
-      print("💾 Using cached library list");
-      final cachedData = _memoryCache[cacheKey];
-      if (cachedData != null) {
-        return List<Map<String, dynamic>>.from(cachedData);
-      }
-      return [];
-    }
-
-    try {
-      final snapshot = await _firestore
-          .collection('libraries')
-          .orderBy('libraryName')
-          .get();
-
-      final allLibraries = <Map<String, dynamic>>[];
-
-      for (var doc in snapshot.docs) {
-        final libraryData = doc.data();
-        final libraryId = doc.id;
-        libraryData['id'] = libraryId;
-
-        allLibraries.add(libraryData);
-      }
-
-      // Cache the results
-      await _cacheData(cacheKey, allLibraries);
-
-      // Update SmartLib
-      SmartLib.allLibraryList = allLibraries;
-
-      return allLibraries;
-    } catch (e) {
-      print("❌ Error fetching libraries: $e");
-
-      // Return cached data on error if available
-      final cachedData = _memoryCache[cacheKey];
-      if (cachedData != null) {
-        return List<Map<String, dynamic>>.from(cachedData);
-      }
-
-      return [];
-    }
-  }
-
-  /// Get seat bookings for a specific library
-  Future<List<Map<String, dynamic>>> getSeatBookingsForLibrary(String libraryId) async {
-    if (libraryId.isEmpty) {
-      print("⚠️ Cannot get seat bookings: libraryId is empty");
-      return [];
-    }
-
-    final cacheKey = 'seat_bookings_${libraryId}';
-
-    // Return cached data if valid and offline
-    if (_isCacheValid(cacheKey) && !_isOnline) {
-      print("💾 Using cached seat bookings");
-      final cachedData = _memoryCache[cacheKey];
-      if (cachedData != null) {
-        return List<Map<String, dynamic>>.from(cachedData);
-      }
-      return [];
-    }
-
-    try {
-      final snapshot = await _firestore
-          .collection('seatBooking')
-          .where('libraryId', isEqualTo: libraryId)
-          .orderBy('createdAt', descending: true)
-          .get();
-
-      final seatBookings = <Map<String, dynamic>>[];
-
-      for (var doc in snapshot.docs) {
-        final bookingData = doc.data();
-        final bookingId = doc.id;
-        bookingData['id'] = bookingId;
-
-
-
-        seatBookings.add(bookingData);
-      }
-
-      // Cache the results
-      await _cacheData(cacheKey, seatBookings);
-
-      // Update SmartLib
-      SmartLib.allSeatBookingList = seatBookings;
-
-      return seatBookings;
-    } catch (e) {
-      print("❌ Error fetching seat bookings: $e");
-
-      // Return cached data on error if available
-      final cachedData = _memoryCache[cacheKey];
-      if (cachedData != null) {
-        return List<Map<String, dynamic>>.from(cachedData);
-      }
-
-      return [];
-    }
-  }
-
-  /// Get attendance records for a specific library on a specific date
-  Future<List<Map<String, dynamic>>> getAttendanceRecordsForLibrary(
-      String libraryId, String date) async {
-    if (libraryId.isEmpty || date.isEmpty) {
-      print("⚠️ Cannot get attendance records: libraryId or date is empty");
-      return [];
-    }
-
-    final cacheKey = 'attendance_lib_${libraryId}_${date}';
-
-    // Return cached data if valid and offline
-    if (_isCacheValid(cacheKey) && !_isOnline) {
-      print("💾 Using cached attendance records");
-      final cachedData = _memoryCache[cacheKey];
-      if (cachedData != null) {
-        return List<Map<String, dynamic>>.from(cachedData);
-      }
-      return [];
-    }
-
-    try {
-      final snapshot = await _firestore
-          .collection('attendance')
-          .doc(date)
-          .collection('records')
-          .where('libraryId', isEqualTo: libraryId)
-          .orderBy('timestamp', descending: true)
-          .get();
-
-      final attendanceRecords = <Map<String, dynamic>>[];
-
-      for (var doc in snapshot.docs) {
-        final recordData = doc.data();
-        final recordId = doc.id;
-        recordData['id'] = recordId;
-
-        // Process timestamps
-        if (recordData['timestamp'] != null) {
-          try {
-            recordData['timestampDateTime'] =
-                (recordData['timestamp'] as Timestamp).toDate().toString();
-          } catch (e) {
-            print("⚠️ Error converting timestamp: $e");
-          }
-        }
-
-        attendanceRecords.add(recordData);
-      }
-
-      // Cache the results
-      await _cacheData(cacheKey, attendanceRecords);
-
-      return attendanceRecords;
-    } catch (e) {
-      print("❌ Error fetching attendance records: $e");
 
       // Return cached data on error if available
       final cachedData = _memoryCache[cacheKey];
@@ -447,15 +398,8 @@ class ListenData {
       listener: () => listenToCurrentStatus(),
     );
 
-    _startListener(
-      name: 'seat_booking',
-      listener: () => listenToSeatBookingUpdates(),
-    );
 
-    _startListener(
-      name: 'student_attendance',
-      listener: () => _listenToStudentAttendanceData(),
-    );
+
   }
 
   /// Set up all listeners for librarian role
@@ -468,24 +412,10 @@ class ListenData {
     _startListener(
       name: 'library_data',
       listener: () => listenToLibraryData(),
-      onSuccess: () {
-        // Only start subscriber listener if we have a valid libraryId
-        if (SmartLib.libraryId.isNotEmpty) {
-          _startListener(
-            name: 'subscriber_data',
-            listener: () => listenToSubscriberData(),
-          );
 
-          _startListener(
-            name: 'librarian_attendance',
-            listener: () => _listenToLibraryAttendanceData(),
-          );
-        }
-      },
     );
 
-    // Fetch library list for librarian
-    getAllLibraries();
+
   }
 
   /// Start a listener with retry logic
@@ -512,10 +442,8 @@ class ListenData {
       } catch (e) {
         if (retries < maxRetries) {
           retries++;
-          print("⚠️ Error starting $name listener. Retrying ($retries/$maxRetries)...");
           Future.delayed(Duration(seconds: 2 * retries), tryStartListener);
         } else {
-          print("❌ Failed to start $name listener after $maxRetries attempts: $e");
         }
       }
     }
@@ -539,7 +467,6 @@ class ListenData {
             try {
               cacheTime = DateTime.parse(cacheTimeStr);
             } catch (e) {
-              print("⚠️ Error parsing cache time: $e");
             }
           }
 
@@ -552,13 +479,10 @@ class ListenData {
               _applyCachedDataToSmartLib(key);
             }
           } catch (e) {
-            print("⚠️ Error processing cached data for $key: $e");
           }
         }
       }
-      print("💾 Loaded ${cachedKeys.length} cached items");
     } catch (e) {
-      print("❌ Error loading cached data: $e");
     }
   }
 
@@ -593,10 +517,10 @@ class ListenData {
         );
       }
     } catch (e) {
-      print("❌ Error applying cached data for $key: $e");
     }
   }
 
+  /// Save data to cache
   /// Save data to cache
   Future<void> _cacheData(String key, dynamic data) async {
     try {
@@ -608,15 +532,62 @@ class ListenData {
         await prefs.setStringList('cachedKeys', cachedKeys);
       }
 
+      // Store in memory cache
       _memoryCache[key] = data;
       _cacheTimes[key] = DateTime.now();
 
-      // Convert data to JSON string
-      final jsonData = json.encode(data);
-      await prefs.setString(key, jsonData);
-      await prefs.setString('${key}_time', DateTime.now().toIso8601String());
+      // Convert data to JSON string before saving to SharedPreferences
+      try {
+        final String jsonData = json.encode(data);
+        await prefs.setString(key, jsonData);
+        await prefs.setString('${key}_time', DateTime.now().toIso8601String());
+      } catch (jsonError) {
+        // Try to identify the problematic fields
+        if (data is Map) {
+          _debugInspectMapForJsonIssues(key, data);
+        } else if (data is List) {
+          _debugInspectListForJsonIssues(key, data);
+        }
+      }
     } catch (e) {
-      print("❌ Error caching data for $key: $e");
+    }
+  }
+
+  /// Helper method to debug JSON serialization issues in Maps
+  void _debugInspectMapForJsonIssues(String key, Map data) {
+    try {
+      data.forEach((k, v) {
+        try {
+          json.encode({k.toString(): v});
+        } catch (e) {
+          // If value is a nested map or list, recursively inspect it
+          if (v is Map) {
+            _debugInspectMapForJsonIssues("$key.$k", v);
+          } else if (v is List) {
+            _debugInspectListForJsonIssues("$key.$k", v);
+          }
+        }
+      });
+    } catch (e) {
+    }
+  }
+
+  /// Helper method to debug JSON serialization issues in Lists
+  void _debugInspectListForJsonIssues(String key, List data) {
+    try {
+      for (int i = 0; i < data.length; i++) {
+        try {
+          json.encode([data[i]]);
+        } catch (e) {
+          // If value is a nested map or list, recursively inspect it
+          if (data[i] is Map) {
+            _debugInspectMapForJsonIssues("$key[$i]", data[i]);
+          } else if (data[i] is List) {
+            _debugInspectListForJsonIssues("$key[$i]", data[i]);
+          }
+        }
+      }
+    } catch (e) {
     }
   }
 
@@ -625,7 +596,6 @@ class ListenData {
   /// Listen for student data changes
   void listenToStudentData() {
     if (SmartLib.studentId.isEmpty) {
-      print("⚠️ Cannot listen to student data: studentId is empty");
       return;
     }
 
@@ -640,7 +610,6 @@ class ListenData {
           // Make sure data is a Map before casting
           if (data is Map) {
             final studentData = Map<String, dynamic>.from(data);
-            print("📡 Student Data Updated");
 
             // Cache the data
             _cacheData('student_data', studentData);
@@ -648,23 +617,18 @@ class ListenData {
             // Update SmartLib
             _applyStudentData(studentData);
           } else {
-            print("⚠️ Student data is not in expected Map format");
           }
         } catch (e) {
-          print("❌ Error processing student data: $e");
         }
       } else {
-        print("⚠️ No student data found");
       }
     }, onError: (error) {
-      print("❌ Error listening to student data: $error");
     });
   }
 
   /// Listen for librarian data changes
   void listenToLibrarianData() {
     if (SmartLib.librarianId.isEmpty) {
-      print("⚠️ Cannot listen to librarian data: librarianId is empty");
       return;
     }
 
@@ -679,7 +643,6 @@ class ListenData {
           // Make sure data is a Map before casting
           if (data is Map) {
             final librarianData = Map<String, dynamic>.from(data);
-            print("📡 Librarian Data Updated");
 
             // Cache the data
             _cacheData('librarian_data', librarianData);
@@ -687,23 +650,18 @@ class ListenData {
             // Update SmartLib
             _applyLibrarianData(librarianData);
           } else {
-            print("⚠️ Librarian data is not in expected Map format");
           }
         } catch (e) {
-          print("❌ Error processing librarian data: $e");
         }
       } else {
-        print("⚠️ No librarian data found");
       }
     }, onError: (error) {
-      print("❌ Error listening to librarian data: $error");
     });
   }
 
   /// Listen for library data changes
   void listenToLibraryData() {
     if (SmartLib.librarianId.isEmpty) {
-      print("⚠️ Cannot listen to library data: librarianId is empty");
       return;
     }
 
@@ -713,7 +671,6 @@ class ListenData {
         .snapshots()
         .listen((snapshot) {
       if (snapshot.docs.isEmpty) {
-        print("⚠️ No libraries found for librarian ${SmartLib.librarianId}");
         return;
       }
 
@@ -726,7 +683,6 @@ class ListenData {
         // Add ID to the data
         libraryData['id'] = libraryId;
 
-        print("📡 Library Data Updated: ${libraryData['libraryName']}");
 
         // Cache the data
         _cacheData('library_data', libraryData);
@@ -734,65 +690,15 @@ class ListenData {
         // Update SmartLib
         _applyLibraryData(libraryData);
       } catch (e) {
-        print("❌ Error processing library data: $e");
       }
     }, onError: (error) {
-      print("❌ Error listening to library data: $error");
     });
   }
 
-  /// Listen for subscriber data changes
-  void listenToSubscriberData() {
-    if (SmartLib.libraryId.isEmpty) {
-      print("⚠️ Cannot listen to subscriber data: libraryId is empty");
-      return;
-    }
-
-    _subscriptions['subscriber_data'] = _firestore
-        .collection('libraries')
-        .doc(SmartLib.libraryId)
-        .collection('subscribers')
-        .snapshots()
-        .listen((snapshot) {
-      try {
-        final allSubscribers = <Map<String, dynamic>>[];
-
-        for (var doc in snapshot.docs) {
-          final subscriberData = doc.data();
-          final subscriberId = doc.id;
-
-          // Add the subscriber ID to the data
-          subscriberData['id'] = subscriberId;
-
-          // Process timestamps
-          if (subscriberData['joinedAt'] != null) {
-            try {
-              subscriberData['joinedAtDateTime'] =
-                  (subscriberData['joinedAt'] as Timestamp).toDate().toString();
-            } catch (e) {
-              // Skip this conversion if there's an error
-            }
-          }
-
-          allSubscribers.add(subscriberData);
-        }
-
-        // Cache the data
-        _cacheData('subscribers_${SmartLib.libraryId}', allSubscribers);
-
-        print("📡 Subscriber Data Updated: ${allSubscribers.length} subscribers");
-      } catch (e) {
-        print("❌ Error processing subscriber data: $e");
-      }
-    }, onError: (error) {
-      print("❌ Error listening to subscriber data: $error");
-    });
-  }
 
   /// Listen for current status updates for a student
   void listenToCurrentStatus() {
     if (SmartLib.studentId.isEmpty) {
-      print("⚠️ Cannot listen to current status: studentId is empty");
       return;
     }
 
@@ -807,74 +713,71 @@ class ListenData {
           // Make sure data is a Map before casting
           if (data is Map) {
             final currentStatusData = Map<String, dynamic>.from(data);
-            print("📡 Current Status Updated");
 
-            // Cache the data
-            _cacheData('current_status', currentStatusData);
 
             // Update SmartLib
             _applyCurrentStatusData(currentStatusData);
           } else {
-            print("⚠️ Current status data is not in expected Map format");
           }
         } catch (e) {
-          print("❌ Error processing current status data: $e");
         }
       } else {
-        print("⚠️ No current status data found");
       }
     }, onError: (error) {
-      print("❌ Error listening to current status: $error");
     });
   }
 
   /// Listen for seat booking updates for a student
   void listenToSeatBookingUpdates() {
     if (SmartLib.studentId.isEmpty) {
-      print("⚠️ Cannot listen to seat bookings: studentId is empty");
       return;
     }
 
     _subscriptions['seat_booking'] = _firestore
         .collection('seatBooking')
         .where('studentId', isEqualTo: SmartLib.studentId)
-        .orderBy('bookingTime', descending: true)
-        .limit(1) // Just get the latest booking
+       // .orderBy('createdAt', descending: true)
+        //.limit(1) // Just get the latest booking
         .snapshots()
         .listen((snapshot) {
       if (snapshot.docs.isEmpty) {
-        print("⚠️ No seat bookings found for student ${SmartLib.studentId}");
         return;
       }
 
       try {
-        // Process the latest booking
-        final doc = snapshot.docs[0];
-        final bookingData = doc.data();
-        final bookingId = doc.id;
+       //all bookings history
+        for (var doc in snapshot.docs) {
+          final bookingData = doc.data();
+          final bookingId = doc.id;
 
-        // Add booking ID to the data
-        bookingData['id'] = bookingId;
+          // Process timestamps
+          if (bookingData['createdAt'] != null) {
+            try {
+              bookingData['createdAtDateTime'] =
+                  (bookingData['createdAt'] as Timestamp).toDate().toString();
+            } catch (e) {
+            }
+          }
 
-        print("📡 Seat Booking Data Updated");
+          // Add booking ID to the data
+          bookingData['id'] = bookingId;
 
-        // Cache the data
-        _cacheData('seat_booking', bookingData);
+          // Cache the data
+          _cacheData('seat_booking', bookingData);
 
-        // Update SmartLib
-        _applySeatBookingData(bookingData);
+          // Update SmartLib
+          _applySeatBookingData(bookingData);
+        }
+
       } catch (e) {
-        print("❌ Error processing seat booking data: $e");
       }
     }, onError: (error) {
-      print("❌ Error listening to seat booking updates: $error");
     });
   }
 
   /// Listen for today's attendance data for a student
   void _listenToStudentAttendanceData() {
     if (SmartLib.studentId.isEmpty) {
-      print("⚠️ Cannot listen to attendance data: studentId is empty");
       return;
     }
 
@@ -912,19 +815,15 @@ class ListenData {
         // Cache the data
         _cacheData('student_attendance_${today}', records);
 
-        print("📡 Student Attendance Data Updated: ${records.length} records");
       } catch (e) {
-        print("❌ Error processing attendance data: $e");
       }
     }, onError: (error) {
-      print("❌ Error listening to attendance data: $error");
     });
   }
 
   /// Listen for today's attendance data for a library
   void _listenToLibraryAttendanceData() {
     if (SmartLib.libraryId.isEmpty) {
-      print("⚠️ Cannot listen to attendance data: libraryId is empty");
       return;
     }
 
@@ -962,12 +861,9 @@ class ListenData {
         // Cache the data
         _cacheData('library_attendance_${today}', records);
 
-        print("📡 Library Attendance Data Updated: ${records.length} records");
       } catch (e) {
-        print("❌ Error processing attendance data: $e");
       }
     }, onError: (error) {
-      print("❌ Error listening to attendance data: $error");
     });
   }
 
@@ -1002,20 +898,15 @@ class ListenData {
 
   /// Apply library data to SmartLib
   void _applyLibraryData(Map<String, dynamic> data) {
-    final addressMap = data['address'] as Map<dynamic, dynamic>? ?? {};
-    final contactMap = data['contact'] as Map<dynamic, dynamic>? ?? {};
+    //address in map extract
+
+
 
     SmartLib.libraryId = data['id'] ?? '';
     SmartLib.libraryName = data['libraryName'] ?? '';
     SmartLib.noOfSeat = data['noOfSeat']?.toString() ?? '';
-    SmartLib.libraryAddress = data['address'] ?? '';
-    SmartLib.city = addressMap['city'] ?? '';
-    SmartLib.contactEmail = contactMap['email'] ?? '';
-    SmartLib.contactPhone = contactMap['phone'] ?? '';
-    SmartLib.state = addressMap['state'] ?? '';
-    SmartLib.landmark = addressMap['landMark'] ?? '';
-    SmartLib.street = addressMap['street'] ?? '';
-    SmartLib.pincode = addressMap['zipCode'] ?? '';
+    SmartLib.addressMap = data['address'] ?? '';
+    SmartLib.contactMap= data['contact'] ?? '';
     SmartLib.libraryImageUrl = data['libraryImageUrl'] ?? '';
     SmartLib.tag = data['tag'] ?? '';
     SmartLib.librarianId = data['librarianId'] ?? '';
@@ -1037,9 +928,9 @@ class ListenData {
     SmartLib.seatNo = data['currentSeatNo'] ?? '';
     SmartLib.seatStatus = data['seatStatus'] ?? '';
     SmartLib.libraryId = data['currentLibraryId'] ?? '';
-    SmartLib.libraryName = data['currentLibraryName'] ?? '';
+    SmartLib.libraryName = data['libraryName'] ?? '';
     SmartLib.isCheckedIn = data['isCheckedIn'] ?? '';
-    SmartLib.librarianId = data['currentLibraryId'] ?? '';
+    SmartLib.streak = data['streak'] ?? '';
     SmartLib.shiftId = data['shiftId'] ?? '';
     SmartLib.dueDate = data['dueDate'] ?? '';
     SmartLib.isMultipleShifts = data['isMultipleShifts'] ?? false;
@@ -1058,4 +949,5 @@ class ListenData {
     SmartLib.shiftEndTime = data['shiftEndTime'] ?? '';
     SmartLib.shiftFee = data['shiftFee']?.toString() ?? '';
   }
+
 }

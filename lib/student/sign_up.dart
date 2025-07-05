@@ -39,7 +39,7 @@ class _SignUpState extends State<SignUp> {
       _isLoading = true;
     });
     // First check if user already exists
-    bool userExists = await AuthFunctions.checkUserExists(
+    bool userExists = await AuthFunctions.checkIsEmailAndMobileUnique(
       _emailController.text,
       _phoneController.text,
       context,
@@ -49,18 +49,20 @@ class _SignUpState extends State<SignUp> {
       setState(() {
         _isLoading = false;
       });
+
       return;
     }
+    // If user does not exist, proceed with sign up and remove email from the firebase auth
 
     await AuthFunctions.signUpWithPhone(
       _phoneController.text.trim(),
       context,
-      (isLoading) {
+          (isLoading) {
         setState(() {
           _isLoading = isLoading;
         });
       },
-      (String vid, bool sent, int step) {
+          (String vid, bool sent, int step) {
         setState(() {
           verificationId = vid;
           optSent = sent;

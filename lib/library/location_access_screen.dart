@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geocoding/geocoding.dart';
 import '../function/student_function.dart';
 import '../models/library_model.dart';
@@ -22,22 +21,14 @@ class _LocationAccessScreenState extends State<LocationAccessScreen> {
   bool _isLoading = false;
   bool _locationObtained = false;
   String _address = "";
-
-  // Controllers for manual location entry
-  final TextEditingController _manualLatController = TextEditingController();
-  final TextEditingController _manualLngController = TextEditingController();
-
-  // Google Maps Controller
-  GoogleMapController? _mapController;
-  Set<Marker> _markers = {};
-  LatLng _initialPosition = const LatLng(28.7041, 77.1025); // Default to Delhi, India
+  double _latitude = 0.0;
+  double _longitude = 0.0;
 
   @override
   void initState() {
     super.initState();
     // Check if the library already has location data
     _checkExistingLocation();
-
     // Request location permission when the screen opens
     _requestLocationPermission();
   }
@@ -54,7 +45,8 @@ class _LocationAccessScreenState extends State<LocationAccessScreen> {
       if (lat != 0 && lng != 0) {
         setState(() {
           _locationObtained = true;
-          _initialPosition = LatLng(lat, lng);
+          _latitude = lat;
+          _longitude = lng;
         });
 
         // Get address for the coordinates
@@ -70,7 +62,7 @@ class _LocationAccessScreenState extends State<LocationAccessScreen> {
     }
   }
 
-  // Direct implementation to get current position
+  // Get current position
   Future<void> _getCurrentLocation() async {
     setState(() {
       _isLoading = true;
@@ -131,14 +123,9 @@ class _LocationAccessScreenState extends State<LocationAccessScreen> {
         _locationObtained = true;
         widget.libraryModel.locationLatitude = lat.toString();
         widget.libraryModel.locationLongitude = lng.toString();
-        _initialPosition = LatLng(lat, lng);
+        _latitude = lat;
+        _longitude = lng;
       });
-
-      // Update map position
-      if (_mapController != null) {
-        _mapController!.animateCamera(CameraUpdate.newLatLngZoom(_initialPosition, 15));
-        _updateMarker(_initialPosition);
-      }
 
       // Get address for the coordinates
       _getAddressFromCoordinates(lat, lng);
@@ -183,144 +170,19 @@ class _LocationAccessScreenState extends State<LocationAccessScreen> {
     }
   }
 
-  void _updateMarker(LatLng position) {
-    setState(() {
-      _markers = {};
-      _markers.add(
-        Marker(
-          markerId: const MarkerId('libraryLocation'),
-          position: position,
-          infoWindow: const InfoWindow(title: 'Library Location'),
-          draggable: true,
-          onDragEnd: (newPosition) {
-            _onMapPositionChanged(newPosition);
-          },
-        ),
-      );
-    });
-  }
-
-  void _onMapPositionChanged(LatLng position) {
-    setState(() {
-      _initialPosition = position;
-      widget.libraryModel.locationLatitude = position.latitude.toString();
-      widget.libraryModel.locationLongitude = position.longitude.toString();
-      _locationObtained = true;
-    });
-
-    // Get address for new position
-    _getAddressFromCoordinates(position.latitude, position.longitude);
-  }
-
-  void _openManualLocationDialog() {
-    // Pre-fill with existing data if available
-    if (_locationObtained) {
-      _manualLatController.text = widget.libraryModel.locationLatitude ?? '';
-      _manualLngController.text = widget.libraryModel.locationLongitude ?? '';
-    }
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: DarkColor.cardColor,
-        title: const Text(
-          "Enter Location Manually",
-          style: TextStyle(color: Colors.white),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _manualLatController,
-              decoration: const InputDecoration(
-                labelText: 'Latitude',
-                hintText: 'e.g. 28.7041',
-              ),
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _manualLngController,
-              decoration: const InputDecoration(
-                labelText: 'Longitude',
-                hintText: 'e.g. 77.1025',
-              ),
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text(
-              "Cancel",
-              style: TextStyle(color: Colors.white70),
-            ),
-          ),
-          TextButton(
-            onPressed: () {
-              // Validate and save manual location
-              final lat = _manualLatController.text;
-              final lng = _manualLngController.text;
-
-              if (lat.isNotEmpty && lng.isNotEmpty) {
-                double? latitude = double.tryParse(lat);
-                double? longitude = double.tryParse(lng);
-
-                if (latitude != null && longitude != null &&
-                    latitude >= -90 && latitude <= 90 &&
-                    longitude >= -180 && longitude <= 180) {
-                  setState(() {
-                    _locationObtained = true;
-                    widget.libraryModel.locationLatitude = lat;
-                    widget.libraryModel.locationLongitude = lng;
-                    _initialPosition = LatLng(latitude, longitude);
-                  });
-
-                  // Update map
-                  if (_mapController != null) {
-                    _mapController!.animateCamera(CameraUpdate.newLatLngZoom(_initialPosition, 15));
-                    _updateMarker(_initialPosition);
-                  }
-
-                  // Get address
-                  _getAddressFromCoordinates(latitude, longitude);
-                  Navigator.pop(context);
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("Please enter valid latitude and longitude values"))
-                  );
-                }
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Please enter both latitude and longitude"))
-                );
-              }
-            },
-            child: const Text(
-              "Save",
-              style: TextStyle(color: DarkColor.highlightColor),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _proceedToNextPage() {
-    // We can proceed without location, but we'll set a message if it wasn't obtained
-    if (!_locationObtained) {
+    if (_locationObtained) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => UploadPictureScreen(libraryModel: widget.libraryModel),
+        ),
+      );
+    } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Proceeding without library location")),
+        const SnackBar(content: Text("Please select a location before proceeding")),
       );
     }
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => UploadPictureScreen(libraryModel: widget.libraryModel),
-      ),
-    );
   }
 
   @override
@@ -358,136 +220,48 @@ class _LocationAccessScreenState extends State<LocationAccessScreen> {
         )
             : Column(
           children: [
-            // Map View
+            // Location Preview Box (replacing the map)
             Container(
-              height: h * 0.35,
+              height: h * 0.25,
+              width: double.infinity,
               margin: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
+                color: DarkColor.cardColor,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: DarkColor.borderColor),
               ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: Stack(
-                  children: [
-                    GoogleMap(
-                      initialCameraPosition: CameraPosition(
-                        target: _initialPosition,
-                        zoom: 15,
-                      ),
-                      markers: _markers,
-                      mapType: MapType.normal,
-                      myLocationEnabled: true,
-                      myLocationButtonEnabled: false,
-                      zoomControlsEnabled: false,
-                      onMapCreated: (controller) {
-                        setState(() {
-                          _mapController = controller;
-
-                          // Apply dark theme styling to the map
-                          _mapController!.setMapStyle('''[
-                            {
-                              "elementType": "geometry",
-                              "stylers": [{"color": "#212121"}]
-                            },
-                            {
-                              "elementType": "labels.text.fill",
-                              "stylers": [{"color": "#757575"}]
-                            },
-                            {
-                              "elementType": "labels.text.stroke",
-                              "stylers": [{"color": "#212121"}]
-                            },
-                            {
-                              "featureType": "administrative",
-                              "elementType": "geometry",
-                              "stylers": [{"color": "#757575"}]
-                            }
-                          ]''');
-                        });
-
-                        // Add marker if location is already selected
-                        if (_locationObtained) {
-                          _updateMarker(_initialPosition);
-                        }
-                      },
-                      onTap: (position) {
-                        _onMapPositionChanged(position);
-                      },
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.location_on,
+                    color: _locationObtained ? DarkColor.highlightColor : Colors.grey,
+                    size: 64,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    _locationObtained
+                        ? "Location Selected"
+                        : "No Location Selected",
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
                     ),
-
-                    // Map controls
-                    Positioned(
-                      right: 10,
-                      bottom: 10,
-                      child: Column(
-                        children: [
-                          Container(
-                            decoration: BoxDecoration(
-                              color: DarkColor.highlightColor,
-                              shape: BoxShape.circle,
-                            ),
-                            margin: const EdgeInsets.only(bottom: 8),
-                            child: IconButton(
-                              icon: const Icon(Icons.my_location, color: Colors.white),
-                              onPressed: _getCurrentLocation,
-                              tooltip: "Get Current Location",
-                            ),
-                          ),
-                          Container(
-                            decoration: BoxDecoration(
-                              color: DarkColor.cardColor.withOpacity(0.8),
-                              shape: BoxShape.circle,
-                            ),
-                            child: IconButton(
-                              icon: const Icon(Icons.add, color: Colors.white),
-                              onPressed: () {
-                                if (_mapController != null) {
-                                  _mapController!.animateCamera(CameraUpdate.zoomIn());
-                                }
-                              },
-                            ),
-                          ),
-                          Container(
-                            decoration: BoxDecoration(
-                              color: DarkColor.cardColor.withOpacity(0.8),
-                              shape: BoxShape.circle,
-                            ),
-                            margin: const EdgeInsets.only(top: 8),
-                            child: IconButton(
-                              icon: const Icon(Icons.remove, color: Colors.white),
-                              onPressed: () {
-                                if (_mapController != null) {
-                                  _mapController!.animateCamera(CameraUpdate.zoomOut());
-                                }
-                              },
-                            ),
-                          ),
-                        ],
+                  ),
+                  if (_locationObtained) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      "Coordinates: $_latitude, $_longitude",
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.7),
+                        fontSize: 14,
                       ),
+                      textAlign: TextAlign.center,
                     ),
-
-                    // Map Instructions
-                    if (!_locationObtained)
-                      Positioned(
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          color: DarkColor.highlightColor.withOpacity(0.8),
-                          child: const Text(
-                            "Tap on the map to select location or use the location button",
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ),
                   ],
-                ),
+                ],
               ),
             ),
 
@@ -528,7 +302,7 @@ class _LocationAccessScreenState extends State<LocationAccessScreen> {
                               if (_locationObtained) ...[
                                 const SizedBox(height: 4),
                                 Text(
-                                  "Lat: ${widget.libraryModel.locationLatitude}, Lng: ${widget.libraryModel.locationLongitude}",
+                                  "Lat: ${_latitude.toStringAsFixed(6)}, Lng: ${_longitude.toStringAsFixed(6)}",
                                   style: TextStyle(
                                     color: Colors.white.withOpacity(0.7),
                                     fontSize: 14,
@@ -599,7 +373,7 @@ class _LocationAccessScreenState extends State<LocationAccessScreen> {
                               ),
                               const SizedBox(width: 8),
                               const Text(
-                                "Location Options",
+                                "Location Information",
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
                                   color: Colors.white,
@@ -609,10 +383,10 @@ class _LocationAccessScreenState extends State<LocationAccessScreen> {
                           ),
                           const SizedBox(height: 8),
                           const Text(
-                            "• Tap directly on the map to select location\n"
-                                "• Use the current location button\n"
-                                "• Enter coordinates manually\n"
-                                "• Drag the marker to fine-tune position",
+                            "• Use the Get Current Location button to detect your position\n"
+                                "• Precise location helps students find your library easier\n"
+                                "• Your library will appear on the app's search map\n"
+                                "• Location accuracy may vary based on your device",
                             style: TextStyle(color: Colors.white70),
                           ),
                         ],
@@ -622,28 +396,12 @@ class _LocationAccessScreenState extends State<LocationAccessScreen> {
                     const SizedBox(height: 24),
 
                     // Action buttons
-                    Row(
-                      children: [
-                        Expanded(
-                          child: SolidButton(
-                            text: "Get Current",
-                            width: double.infinity,
-                            height: 45,
-                            onPressed: _getCurrentLocation,
-                            buttonColor: DarkColor.cardColor,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: SolidButton(
-                            text: "Enter Manually",
-                            width: double.infinity,
-                            height: 45,
-                            onPressed: _openManualLocationDialog,
-                            buttonColor: DarkColor.cardColor,
-                          ),
-                        ),
-                      ],
+                    SolidButton(
+                      text: "Get Current Location",
+                      width: double.infinity,
+                      height: 50,
+                      onPressed: _getCurrentLocation,
+                      buttonColor: DarkColor.cardColor,
                     ),
                   ],
                 ),
@@ -673,13 +431,5 @@ class _LocationAccessScreenState extends State<LocationAccessScreen> {
         ),
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    _manualLatController.dispose();
-    _manualLngController.dispose();
-    _mapController?.dispose();
-    super.dispose();
   }
 }

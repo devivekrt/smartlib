@@ -441,6 +441,12 @@ class _StudentProfileSetupPageState extends State<StudentProfileSetupPage> {
                                 borderSide: BorderSide(
                                   color: Colors.blue[200]!,
                                 ),
+                                validator: (value) {
+                                  if (value == null || value.isEmpty) {
+                                    return 'Please enter a username';
+                                  }
+                                  return null;
+                                },
                               ),
                               Gap(20),
                               const Align(
@@ -597,6 +603,12 @@ class _StudentProfileSetupPageState extends State<StudentProfileSetupPage> {
                                 labelText: 'Full Name',
                                 hintText: 'Enter your full name',
                                 borderRadius: BorderRadius.circular(8),
+                                validator: (value) {
+                                  if (value == null || value.isEmpty) {
+                                    return 'Please enter your full name';
+                                  }
+                                  return null;
+                                },
                               ),
                               SizedBox(height: 30),
                               GestureDetector(
@@ -638,6 +650,12 @@ class _StudentProfileSetupPageState extends State<StudentProfileSetupPage> {
                                 labelText: 'Department/Faculty',
                                 hintText: 'E.g., Computer Science, Arts',
                                 borderRadius: BorderRadius.circular(8),
+                                validator: (value) {
+                                  if (value == null || value.isEmpty) {
+                                    return 'Please enter your department';
+                                  }
+                                  return null;
+                                },
                               ),
                             ],
                           ),

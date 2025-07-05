@@ -15,7 +15,7 @@ import 'notification_service.dart';
 
 class AuthFunctions {
   // Function to check if user exists in database
-  static Future<bool> checkUserExists(
+  static Future<bool> checkIsEmailAndMobileUnique(
     String email,
     String phone,
     BuildContext context,
@@ -26,7 +26,7 @@ class AuthFunctions {
     final String normalizedPhone = phone.trim();
 
     // Define user types to check
-    final List<String> userTypes = ['librarian', 'student'];
+    final List<String> userTypes = ['librarians', 'students'];
 
     // Create all queries to run in parallel
     List<Future<DataSnapshot>> queries = [];
@@ -61,13 +61,10 @@ class AuthFunctions {
     // Check for email existence (first half of results)
     for (int i = 0; i < userTypes.length; i++) {
       if (results[i].exists) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Email already in use by a ${userTypes[i]}. Please use a different email.',
-            ),
-          ),
-        );
+        // Show validation error for email
+        _showValidationError
+          (context, 'Email already in use by a ${userTypes[i]}. Please use a different email.');
+
         return true;
       }
     }
@@ -76,18 +73,26 @@ class AuthFunctions {
     for (int i = 0; i < userTypes.length; i++) {
       final int resultIndex = i + userTypes.length;
       if (results[resultIndex].exists) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Phone number already in use by a ${userTypes[i]}. Please use a different number.',
-            ),
-          ),
+        _showValidationError(
+          context,
+          'Phone number already in use by a ${userTypes[i]}. Please use a different number.',
+
         );
         return true;
       }
     }
 
     return false; // User doesn't exist in either path
+  }
+  /// Helper method to show validation errors
+  static void _showValidationError(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message,style: TextStyle(color: Colors.white),),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   // Function to sign up with phone number
@@ -467,13 +472,17 @@ class AuthFunctions {
 
   Future<void> userLogout(BuildContext context) async {
     try {
-      // Remove FCM token to stop receiving notifications
 
       // Clear session data
       await AuthService.clearUserSession();
 
       // Reset SmartLib userId
       SmartLib.userId = "";
+      SmartLib.userType = "";
+      SmartLib.libraryId = "";
+      SmartLib.librarianId = "";
+      SmartLib.studentId = "";
+
 
       // Show success message
       ScaffoldMessenger.of(context).showSnackBar(

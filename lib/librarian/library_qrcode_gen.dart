@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:gal/gal.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/services.dart';
@@ -29,6 +30,7 @@ class LibraryQRGeneratorScreen extends StatefulWidget {
 
 class _LibraryQRGeneratorScreenState extends State<LibraryQRGeneratorScreen> with SingleTickerProviderStateMixin {
   final GlobalKey _qrKey = GlobalKey();
+  final GlobalKey _fullCardKey = GlobalKey(); // Key for full card capture
   bool _isGenerating = false;
   bool _showSuccess = false;
   String _successMessage = '';
@@ -60,7 +62,7 @@ class _LibraryQRGeneratorScreenState extends State<LibraryQRGeneratorScreen> wit
     return '${widget.libraryId}_SMARTLIB';
   }
 
-  // Save QR code using a
+  // Save QR code using Gal package
   Future<void> _saveQRToGallery() async {
     setState(() {
       _isGenerating = true;
@@ -68,35 +70,42 @@ class _LibraryQRGeneratorScreenState extends State<LibraryQRGeneratorScreen> wit
     });
 
     try {
-      // Capture QR code as image
-      RenderRepaintBoundary boundary = _qrKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+      // Capture full QR card as image
+      RenderRepaintBoundary boundary = _fullCardKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
       ui.Image image = await boundary.toImage(pixelRatio: 3.0);
       ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
 
       if (byteData != null) {
-        // Save to phone storage download directory
-        final saveDir = await getDownloadsDirectory();
-        final fileName = "SmartLib_QR_${widget.libraryId}_${DateTime.now().millisecondsSinceEpoch}.png";
-        // save the image in the phone gallery
-        final file = File('${saveDir!.absolute}/$fileName');
-        // Write bytes to file
-        await file.writeAsBytes(byteData.buffer.asUint8List());
+        // Convert ByteData to Uint8List
+        final Uint8List pngBytes = byteData.buffer.asUint8List();
 
-        // Show success message with file path
+        // Create a temporary file to save the image
+        final tempDir = await getTemporaryDirectory();
+        final fileName = "SmartLib_QR_${widget.libraryId}_${DateTime.now().millisecondsSinceEpoch}.png";
+        final tempFile = File('${tempDir.path}/$fileName');
+
+        // Write the file
+        await tempFile.writeAsBytes(pngBytes);
+
+        // Save to gallery using Gal
+        await Gal.putImage(tempFile.path);
+
+        // Show success message
         setState(() {
           _showSuccess = true;
-          _successMessage = 'QR code saved successfully!';
+          _successMessage = 'QR code saved to gallery!';
         });
 
-        // Share additional information about where the file is saved
+        // Show more specific success info
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('QR code saved to: ${file.path}'),
+            content: Text('QR code saved to your photo gallery'),
+            backgroundColor: Colors.green,
             duration: Duration(seconds: 5),
             action: SnackBarAction(
               label: 'OKAY',
+              textColor: Colors.white,
               onPressed: () {
-                // Dismiss the snackbar
                 ScaffoldMessenger.of(context).hideCurrentSnackBar();
               },
             ),
@@ -114,7 +123,10 @@ class _LibraryQRGeneratorScreenState extends State<LibraryQRGeneratorScreen> wit
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error saving QR code: $e')),
+        SnackBar(
+          content: Text('Error saving QR code: $e'),
+          backgroundColor: Colors.red,
+        ),
       );
     } finally {
       setState(() {
@@ -265,162 +277,200 @@ class _LibraryQRGeneratorScreenState extends State<LibraryQRGeneratorScreen> wit
 
                       SizedBox(height: 30),
 
-                      // Single unified QR code with enhanced design
+                      // Single unified QR code with enhanced design - WITH FULL CARD REPAINT BOUNDARY
                       ScaleTransition(
                         scale: _scaleAnimation,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(24),
-                            boxShadow: [
-                              BoxShadow(
-                                color: accentColor.withOpacity(0.2),
-                                blurRadius: 30,
-                                spreadRadius: 5,
-                                offset: Offset(0, 10),
-                              ),
-                            ],
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                accentColor,
-                                secondaryAccentColor,
+                        child: RepaintBoundary(
+                          key: _fullCardKey,  // Use the full card key here
+                          child: Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(24),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: accentColor.withOpacity(0.2),
+                                  blurRadius: 30,
+                                  spreadRadius: 5,
+                                  offset: Offset(0, 10),
+                                ),
                               ],
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  accentColor,
+                                  secondaryAccentColor,
+                                ],
+                              ),
                             ),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(3.0),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(22),
-                              child: Container(
-                                color: cardColor,
-                                padding: EdgeInsets.all(24),
-                                child: Column(
-                                  children: [
-                                    // Check-in/out badge
-                                    Container(
-                                      padding: EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                                      decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(30),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: accentColor.withOpacity(0.3),
-                                            blurRadius: 10,
-                                            spreadRadius: 0,
-                                            offset: Offset(0, 4),
-                                          ),
-                                        ],
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(Icons.login, color: Colors.white, size: 18),
-                                          SizedBox(width: 8),
-                                          Text(
-                                            "CHECK-IN & CHECK-OUT",
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 14,
-                                              letterSpacing: 1,
-                                            ),
-                                          ),
-                                          SizedBox(width: 8),
-                                          Icon(Icons.logout, color: Colors.white, size: 18),
-                                        ],
-                                      ),
-                                    ),
-
-                                    SizedBox(height: 24),
-
-                                    // QR code with repaint boundary for saving
-                                    RepaintBoundary(
-                                      key: _qrKey,
-                                      child: Container(
-                                        width: MediaQuery.of(context).size.width - 50,
-
-                                        height: MediaQuery.of(context).size.width - 100,
-                                        padding: EdgeInsets.all(16),
+                            child: Padding(
+                              padding: const EdgeInsets.all(3.0),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(22),
+                                child: Container(
+                                  color: cardColor,
+                                  padding: EdgeInsets.all(24),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      // Check-in/out badge
+                                      Container(
+                                        padding: EdgeInsets.symmetric(horizontal: 18, vertical: 10),
                                         decoration: BoxDecoration(
-                                          color: Colors.white,
-                                          borderRadius: BorderRadius.circular(20),
+                                          borderRadius: BorderRadius.circular(30),
+                                          gradient: LinearGradient(
+                                            colors: [accentColor, secondaryAccentColor],
+                                            begin: Alignment.centerLeft,
+                                            end: Alignment.centerRight,
+                                          ),
                                           boxShadow: [
                                             BoxShadow(
-                                              color: Colors.black.withOpacity(0.05),
+                                              color: accentColor.withOpacity(0.3),
                                               blurRadius: 10,
                                               spreadRadius: 0,
+                                              offset: Offset(0, 4),
                                             ),
                                           ],
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.login, color: Colors.white, size: 18),
+                                            SizedBox(width: 8),
+                                            Text(
+                                              "CHECK-IN & CHECK-OUT",
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 14,
+                                                letterSpacing: 1,
+                                              ),
+                                            ),
+                                            SizedBox(width: 8),
+                                            Icon(Icons.logout, color: Colors.white, size: 18),
+                                          ],
+                                        ),
+                                      ),
+
+                                      SizedBox(height: 24),
+
+                                      // QR code with inner repaint boundary for reference
+                                      RepaintBoundary(
+                                        key: _qrKey,
+                                        child: Container(
+                                          width: MediaQuery.of(context).size.width - 150,
+                                          height: MediaQuery.of(context).size.width - 150,
+                                          padding: EdgeInsets.all(16),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius: BorderRadius.circular(20),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.black.withOpacity(0.05),
+                                                blurRadius: 10,
+                                                spreadRadius: 0,
+                                              ),
+                                            ],
+                                            border: Border.all(
+                                              color: accentColor.withOpacity(0.2),
+                                              width: 2,
+                                            ),
+                                          ),
+                                          child: QrImageView(
+                                            data: _generateQRData(),
+                                            version: QrVersions.auto,
+                                            backgroundColor: Colors.white,
+                                            size: 240,
+                                            errorCorrectionLevel: QrErrorCorrectLevel.H,
+                                            embeddedImageStyle: QrEmbeddedImageStyle(
+                                              size: Size(50, 50),
+                                            ),
+                                            semanticsLabel: 'QR Code for ${widget.libraryName}',
+                                          ),
+                                        ),
+                                      ),
+
+                                      SizedBox(height: 24),
+
+                                      // Library Information
+                                      Container(
+                                        width: double.infinity,
+                                        padding: EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: accentColor.withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(12),
                                           border: Border.all(
                                             color: accentColor.withOpacity(0.2),
-                                            width: 2,
                                           ),
                                         ),
-                                        child: QrImageView(
-                                          data: _generateQRData(),
-                                          version: QrVersions.auto,
-                                          backgroundColor: Colors.white,
-                                          size: 240,
-                                          errorCorrectionLevel: QrErrorCorrectLevel.H,
-                                          embeddedImageStyle: QrEmbeddedImageStyle(
-                                            size: Size(50, 50),
-                                          ),
-                                          semanticsLabel: 'QR Code for ${widget.libraryName}',
-                                        ),
-                                      ),
-                                    ),
-
-                                    SizedBox(height: 24),
-
-                                    // Description
-                                    Container(
-                                      padding: EdgeInsets.all(12),
-                                      decoration: BoxDecoration(
-                                        color: accentColor.withOpacity(0.1),
-                                        borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(
-                                          color: accentColor.withOpacity(0.2),
-                                        ),
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          Icon(
-                                            Icons.info_outline,
-                                            color: accentColor,
-                                            size: 20,
-                                          ),
-                                          SizedBox(width: 12),
-                                          Expanded(
-                                            child: Text(
-                                              "Smart detection automatically determines whether to check in or check out based on the student's current status.",
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.center,
+                                          children: [
+                                            Text(
+                                              widget.libraryName,
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 18,
+                                                color: accentColor,
+                                              ),
+                                              textAlign: TextAlign.center,
+                                            ),
+                                            SizedBox(height: 8),
+                                            Text(
+                                              widget.libraryAddress,
                                               style: TextStyle(
                                                 fontSize: 14,
+                                                color: isDarkMode ? Colors.white70 : Colors.black87,
                                               ),
+                                              textAlign: TextAlign.center,
+                                            ),
+                                            SizedBox(height: 8),
+                                            Text(
+                                              "Library ID: ${widget.libraryId}",
+                                              style: TextStyle(
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w500,
+                                                color: isDarkMode ? Colors.white70 : Colors.black87,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+
+                                      SizedBox(height: 16),
+
+                                      // Date generated
+                                      Text(
+                                        "Generated: ${DateFormat('yyyy-MM-dd').format(DateTime.now())}",
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: isDarkMode ? Colors.white54 : Colors.black54,
+                                        ),
+                                      ),
+
+                                      SizedBox(height: 8),
+
+                                      // Footer info
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            Icons.qr_code_scanner,
+                                            size: 16,
+                                            color: isDarkMode ? Colors.white54 : Colors.black54,
+                                          ),
+                                          SizedBox(width: 8),
+                                          Text(
+                                            "SmartLib",
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w500,
+                                              color: isDarkMode ? Colors.white54 : Colors.black54,
                                             ),
                                           ),
                                         ],
                                       ),
-                                    ),
-
-                                    SizedBox(height: 16),
-
-                                    // Library ID displayed within QR section
-                                    Container(
-                                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                      decoration: BoxDecoration(
-                                        color: isDarkMode ? Colors.grey[800] : Colors.grey[200],
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Text(
-                                        "Library: ${widget.libraryId}",
-                                        style: TextStyle(
-                                          color: isDarkMode ? Colors.white : Colors.black,
-                                          fontWeight: FontWeight.w500,
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
@@ -509,9 +559,9 @@ class _LibraryQRGeneratorScreenState extends State<LibraryQRGeneratorScreen> wit
                                 valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                               ),
                             )
-                                : Icon(Icons.save_alt, size: 24),
+                                : Icon(Icons.photo_library, size: 24),
                             label: Text(
-                              _isGenerating ? "Saving..." : "Save QR Code",
+                              _isGenerating ? "Saving..." : "Save to Gallery",
                               style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
@@ -659,7 +709,7 @@ class _LibraryQRGeneratorScreenState extends State<LibraryQRGeneratorScreen> wit
                         ),
                         SizedBox(height: 16),
                         Text(
-                          "Processing QR code...",
+                          "Saving QR code to gallery...",
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                           ),

@@ -42,7 +42,6 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
       final querySnapshot = await FirebaseFirestore.instance
           .collection('userNotifications')
           .where('userId', isEqualTo: widget.studentId)
-          .orderBy('createdAt', descending: true)
           .limit(50)
           .get();
 

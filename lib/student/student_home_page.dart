@@ -638,7 +638,7 @@ class _StudentHomePageState extends State<StudentHomePage> {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         // Profile and Greeting
-         Row(
+        Row(
           children: [
             InkWell(
               onTap: () {
@@ -748,7 +748,9 @@ class _StudentHomePageState extends State<StudentHomePage> {
                   size: 22,
                 ),
               ),
-              Container(
+              //only show then unread msg
+              if (_userData['unreadNotifications'] != null && _userData['unreadNotifications'] > 0)
+               Container(
                 height: 12,
                 width: 12,
                 decoration: BoxDecoration(
@@ -766,7 +768,6 @@ class _StudentHomePageState extends State<StudentHomePage> {
 
   // Advanced Student Detail Current Status Card
   Widget _buildCurrentStatusCard(double width) {
-
     // Has data flag - check if we have meaningful data to display
     final hasData = _currentLibraryId.isNotEmpty || _currentSeatId.isNotEmpty || _shiftId.isNotEmpty;
 
@@ -820,7 +821,7 @@ class _StudentHomePageState extends State<StudentHomePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Header with icon and refresh button
+                  // Header with icon and library name
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -872,38 +873,30 @@ class _StudentHomePageState extends State<StudentHomePage> {
                         ],
                       ),
 
-                      // Refresh button
+                      // Optional: Time display instead of refresh button
                       Container(
+                        padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                         decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.2),
-                              blurRadius: 6,
-                              offset: Offset(0, 2),
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.update,
+                              color: Colors.white,
+                              size: 14,
+                            ),
+                            SizedBox(width: 4),
+                            Text(
+                              "Auto-updated",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                              ),
                             ),
                           ],
-                        ),
-                        child: CircleAvatar(
-                          radius: 18,
-                          backgroundColor: Colors.white,
-                          child: IconButton(
-                            padding: EdgeInsets.zero,
-                            iconSize: 18,
-                            onPressed: () {
-                              // Refresh status data
-                              _fetchCurrentStatus();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Refreshing your status...'),
-                                  duration: Duration(seconds: 1),
-                                  behavior: SnackBarBehavior.floating,
-                                ),
-                              );
-                            },
-                            icon: Icon(Icons.refresh, color: Color(0xff1940CC)),
-                            tooltip: "Refresh Status",
-                          ),
                         ),
                       ),
                     ],
@@ -1029,7 +1022,6 @@ class _StudentHomePageState extends State<StudentHomePage> {
                           ],
                         ),
                       ),
-
                     ],
                   ),
 
@@ -1063,7 +1055,6 @@ class _StudentHomePageState extends State<StudentHomePage> {
                       ),
                     ],
                   ),
-
                 ],
               ),
             ),

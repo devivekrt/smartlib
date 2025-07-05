@@ -1,5 +1,6 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:smartlib/student/welcomescreen.dart';
 import 'package:smartlib/theme/theme.dart';
 import 'package:smartlib/student/Login.dart';
@@ -20,14 +21,23 @@ import 'library/library_details_upload.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Set UI style - fast operation
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+    ),
+  );
+  runApp(const MyApp());
 
   await Firebase.initializeApp();
   // Initialize notification service
-  await NotificationService().initialize();
+ Future.wait([
+  NotificationService().initialize(),
   // Initialize location service
-  final locationService = StudentLocationService();
-  await locationService.initialize();
-  runApp(const MyApp());
+   StudentLocationService().initialize(),
+ ]);
+
 }
 
 class MyApp extends StatelessWidget {
@@ -38,7 +48,6 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: "LibTrack",
       theme: darkTheme,
-      navigatorKey: NotificationService().navigatorKey,
       debugShowCheckedModeBanner: false,
       home: SplashScreen( ),
     );

@@ -1665,6 +1665,7 @@ class _MultiShiftPaymentScreenState extends State<MultiShiftPaymentScreen> {
         "shiftStartTime": shiftDetails[0]['shiftStartTime'],
         "shiftEndTime": shiftDetails[0]['shiftEndTime'],
         "shiftName": shiftDetails[0]['shiftName'],
+        "libraryName": widget.library.libraryName,
         if (widget.selectedShifts.length == 1)
           "shiftId": widget.selectedShifts[0]['id'],
         if (widget.selectedShifts.length > 1 &&

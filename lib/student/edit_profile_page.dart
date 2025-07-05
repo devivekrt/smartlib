@@ -6,13 +6,13 @@ import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:gap/gap.dart';
 import 'package:smartlib/data/string.dart';
-import 'package:smartlib/models/student_model.dart'; // Import StudentModel
-import 'package:geolocator/geolocator.dart'; // For location permissions
-import 'package:intl/intl.dart'; // For date formatting
+import 'package:smartlib/models/student_model.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:intl/intl.dart';
 import 'dart:io';
+import 'package:flutter_image_compress/flutter_image_compress.dart'; // Add this package
 
 class EditProfilePage extends StatefulWidget {
-
   const EditProfilePage({
     Key? key,
   }) : super(key: key);
@@ -22,15 +22,11 @@ class EditProfilePage extends StatefulWidget {
 }
 
 class _EditProfilePageState extends State<EditProfilePage> {
-  // Current timestamp
-  final String formattedDateTime = "2025-06-21 07:51:54";
-  final String userLogin = "devivekrt";
-
   // Form controllers
   final TextEditingController _fullNameController = TextEditingController();
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _phoneController  = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _departmentController = TextEditingController();
 
   // Form values
@@ -45,21 +41,67 @@ class _EditProfilePageState extends State<EditProfilePage> {
   String _profileImageUrl = '';
   bool _isUploading = false;
 
-  // Student ID and Auth ID
-  String _studentId = '';
-  String _authId = '';
-
-  // Loading state
-  bool _isLoading = false;
+  // Loading states
+  bool _isLoading = true;
   bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
+    _loadUserData();
     _checkLocationPermission();
   }
 
+  // Load user data from Firebase
+  Future<void> _loadUserData() async {
+    setState(() {
+      _isLoading = true;
+    });
 
+    try {
+      final studentId = SmartLib.userId;
+      final studentRef = FirebaseDatabase.instance
+          .ref()
+          .child('${SmartLib.constPath}/students/$studentId');
+
+      final snapshot = await studentRef.once();
+
+      if (snapshot.snapshot.exists) {
+        final data = snapshot.snapshot.value as Map<dynamic, dynamic>;
+
+        setState(() {
+          _fullNameController.text = data['fullName'] ?? '';
+          _usernameController.text = data['username'] ?? '';
+          _emailController.text = data['email'] ?? '';
+          _phoneController.text = data['phone'] ?? '';
+          _departmentController.text = data['department'] ?? '';
+          _profileImageUrl = data['profileImageUrl'] ?? '';
+
+          // Parse gender if available
+          if (data.containsKey('gender')) {
+            _gender = data['gender'];
+          }
+
+          // Parse date of birth if available
+          if (data.containsKey('dateOfBirth')) {
+            try {
+              _dateOfBirth = DateTime.parse(data['dateOfBirth']);
+            } catch (e) {
+              print('Error parsing date of birth: $e');
+            }
+          }
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error loading profile data: $e')),
+      );
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -159,6 +201,70 @@ class _EditProfilePageState extends State<EditProfilePage> {
     }
   }
 
+  // Compress image to target size
+  Future<File?> _compressImage(File file) async {
+    try {
+      // Check file size first
+      final fileSize = await file.length();
+      final targetSize = 50 * 1024; // 50kb in bytes
+
+      // If already under target size, return original file
+      if (fileSize <= targetSize) {
+        return file;
+      }
+
+      // Calculate quality (start with 85% quality)
+      int quality = 85;
+
+      // If file is very large, reduce quality more aggressively
+      if (fileSize > 1000 * 1024) { // If over 1MB
+        quality = 50;
+      } else if (fileSize > 500 * 1024) { // If over 500KB
+        quality = 65;
+      }
+
+      // Create a temp file path
+      final tempDir = Directory.systemTemp;
+      final targetPath = tempDir.path + '/compressed_${DateTime.now().millisecondsSinceEpoch}.jpg';
+
+      // Compress the image
+      final result = await FlutterImageCompress.compressAndGetFile(
+        file.absolute.path,
+        targetPath,
+        quality: quality,
+        format: CompressFormat.jpeg,
+      );
+
+      if (result == null) {
+        return file;
+      }
+
+      // Check if it meets our target size
+      final resultSize = await result.length();
+
+      // If still too large, compress again with lower quality
+      if (resultSize > targetSize) {
+        final lowerQuality = (quality * targetSize / resultSize).round();
+        final secondPath = tempDir.path + '/compressed2_${DateTime.now().millisecondsSinceEpoch}.jpg';
+
+        final secondResult = await FlutterImageCompress.compressAndGetFile(
+          secondPath,
+          secondPath,
+          quality: lowerQuality,
+          format: CompressFormat.jpeg,
+        );
+
+        return secondResult != null ? File(secondResult.path) : File(result.path);
+      }
+
+      return File(result.path);
+    } catch (e) {
+      print('Error compressing image: $e');
+      // Return original file if compression fails
+      return file;
+    }
+  }
+
   // Upload image to Firebase Storage
   Future<String?> _uploadImage() async {
     if (_imageFile == null) return _profileImageUrl; // Return existing URL if no new image
@@ -171,6 +277,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
       // Create a unique file name
       String fileName = 'profile_${SmartLib.userId}_${DateTime.now().millisecondsSinceEpoch}.jpg';
 
+      // Compress image to target size
+      File? compressedFile = await _compressImage(_imageFile!);
+
       // Get storage reference
       Reference storageRef = FirebaseStorage.instance
           .ref()
@@ -178,7 +287,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
           .child(fileName);
 
       // Upload file
-      await storageRef.putFile(_imageFile!);
+      await storageRef.putFile(compressedFile!);
 
       // Get download URL
       String downloadUrl = await storageRef.getDownloadURL();
@@ -235,24 +344,27 @@ class _EditProfilePageState extends State<EditProfilePage> {
       // Upload image if selected
       String profileImageUrl = await _uploadImage() ?? _profileImageUrl;
 
-      // Create StudentModel
+      // Create data to update
       final studentId = SmartLib.userId;
-      final email = _emailController.text.trim();
-      final department = _departmentController.text.trim();
-      final username = _usernameController.text.trim();
-      final fullName = _fullNameController.text.trim();
+      final data = {
+        'fullName': _fullNameController.text.trim(),
+        'username': _usernameController.text.trim(),
+        'email': _emailController.text.trim(),
+        'phone': _phoneController.text.trim(),
+        'department': _departmentController.text.trim(),
+        'profileImageUrl': profileImageUrl,
+        'gender': _gender,
+        'dateOfBirth': _dateOfBirth.toIso8601String(),
+        'lastUpdated': DateTime.now().toIso8601String(),
+      };
 
-      // Update profile image separately if Firestore is also used
+
+
+      // Update the database
       await FirebaseDatabase.instance
           .ref()
           .child('${SmartLib.constPath}/students/$studentId')
-          .update({
-        'fullName': fullName,
-        'username': username,
-        'email': email,
-        'department': department,
-        'profileImageUrl': profileImageUrl,
-      },);
+          .update(data);
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -280,7 +392,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
     final textColor = isDarkMode ? Colors.white : Colors.black;
     final cardColor = Theme.of(context).cardColor;
 
-
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -291,7 +402,13 @@ class _EditProfilePageState extends State<EditProfilePage> {
           ),
         ),
       ),
-      body: Column(
+      body: _isLoading
+          ? Center(
+        child: CircularProgressIndicator(
+          color: Color(0xff1940CC),
+        ),
+      )
+          : Column(
         children: [
           Expanded(
             child: SingleChildScrollView(
@@ -428,22 +545,37 @@ class _EditProfilePageState extends State<EditProfilePage> {
                                     fit: BoxFit.cover,
                                     width: 100,
                                     height: 100,
-                                    errorBuilder: (context, error, stackTrace) =>
-                                        Center(
-                                          child: Text(
-                                            'V',
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 36,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
+                                    loadingBuilder: (context, child, loadingProgress) {
+                                      if (loadingProgress == null) return child;
+                                      return Center(
+                                        child: CircularProgressIndicator(
+                                          color: Colors.white,
+                                          value: loadingProgress.expectedTotalBytes != null
+                                              ? loadingProgress.cumulativeBytesLoaded /
+                                              loadingProgress.expectedTotalBytes!
+                                              : null,
                                         ),
+                                      );
+                                    },
+                                    errorBuilder: (context, error, stackTrace) => Center(
+                                      child: Text(
+                                        _fullNameController.text.isNotEmpty
+                                            ? _fullNameController.text[0].toUpperCase()
+                                            : 'U',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 36,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
                                   ),
                                 )
                                     : Center(
                                   child: Text(
-                                    "V",
+                                    _fullNameController.text.isNotEmpty
+                                        ? _fullNameController.text[0].toUpperCase()
+                                        : 'U',
                                     style: TextStyle(
                                       color: Colors.white,
                                       fontSize: 36,
@@ -562,7 +694,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
                         initialDate: _dateOfBirth,
                         firstDate: DateTime(1950),
                         lastDate: DateTime.now(),
-
                       );
 
                       if (picked != null && picked != _dateOfBirth) {
@@ -577,6 +708,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                         vertical: 14,
                       ),
                       decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.withOpacity(0.3)),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Row(
@@ -584,7 +716,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                           Icon(Icons.calendar_today),
                           SizedBox(width: 16),
                           Text(
-                            '${_dateOfBirth.day}/${_dateOfBirth.month}/${_dateOfBirth.year}',
+                            DateFormat('dd/MM/yyyy').format(_dateOfBirth),
                             style: TextStyle(
                               fontSize: 16,
                             ),
@@ -615,6 +747,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                       vertical: 5,
                     ),
                     decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.withOpacity(0.3)),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: DropdownButtonHideUnderline(
@@ -788,6 +921,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
         SizedBox(height: 8),
         Container(
           decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey.withOpacity(0.3)),
             borderRadius: BorderRadius.circular(10),
           ),
           child: TextField(

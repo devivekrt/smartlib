@@ -44,20 +44,17 @@ class StudentLocationService {
   // Initialize the service
   Future<bool> initialize() async {
     try {
-      print('[2025-06-29 09:27:40] devivekrt: Initializing StudentLocationService');
 
       // Try to load saved location data first
       await _loadSavedLocation();
 
       // If location is stale or not available, request a fresh location
       if (isStale) {
-        print('[2025-06-29 09:27:40] devivekrt: Stored location is stale, getting fresh location');
         await requestSingleLocationUpdate();
       }
 
       return isLocationAvailable;
     } catch (e) {
-      print('[2025-06-29 09:27:40] devivekrt: Error initializing StudentLocationService: $e');
       return false;
     }
   }
@@ -81,10 +78,8 @@ class StudentLocationService {
           _lastUpdated = DateTime.parse(lastUpdatedString);
         }
 
-        print('[2025-06-29 09:27:40] devivekrt: Loaded location from storage: $_latitude, $_longitude (last updated: $_lastUpdated)');
       }
     } catch (e) {
-      print('[2025-06-29 09:27:40] devivekrt: Error loading saved location: $e');
     }
   }
 
@@ -106,9 +101,7 @@ class StudentLocationService {
         await prefs.setString('user_address', _address!);
       }
 
-      print('[2025-06-29 09:27:40] devivekrt: Saved location to preferences: $_latitude, $_longitude');
     } catch (e) {
-      print('[2025-06-29 09:27:40] devivekrt: Error saving location to preferences: $e');
     }
   }
 
@@ -118,7 +111,6 @@ class StudentLocationService {
       // Check if location services are enabled
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
-        print('[2025-06-29 09:27:40] devivekrt: Location services are disabled');
         return null;
       }
 
@@ -127,13 +119,11 @@ class StudentLocationService {
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
-          print('[2025-06-29 09:27:40] devivekrt: Location permission denied');
           return null;
         }
       }
 
       if (permission == LocationPermission.deniedForever) {
-        print('[2025-06-29 09:27:40] devivekrt: Location permission permanently denied');
         return null;
       }
 
@@ -165,10 +155,8 @@ class StudentLocationService {
       // Notify listeners
       _locationUpdateController.add(locationData);
 
-      print('[2025-06-29 09:27:40] devivekrt: Updated location: $_latitude, $_longitude');
       return locationData;
     } catch (e) {
-      print('[2025-06-29 09:27:40] devivekrt: Error updating location: $e');
       return null;
     }
   }
@@ -201,10 +189,8 @@ class StudentLocationService {
         }
 
         _address = addressParts.join(", ");
-        print('[2025-06-29 09:27:40] devivekrt: Updated address: $_address');
       }
     } catch (e) {
-      print('[2025-06-29 09:27:40] devivekrt: Error getting address: $e');
     }
   }
 
@@ -213,12 +199,10 @@ class StudentLocationService {
     if (_isTracking) return true;
 
     try {
-      print('[2025-06-29 09:27:40] devivekrt: Starting location tracking');
 
       // Check permissions and get initial position
       final initialLocation = await requestSingleLocationUpdate();
       if (initialLocation == null) {
-        print('[2025-06-29 09:27:40] devivekrt: Failed to get initial location');
         return false;
       }
 
@@ -241,7 +225,6 @@ class StudentLocationService {
       _isTracking = true;
       return true;
     } catch (e) {
-      print('[2025-06-29 09:27:40] devivekrt: Error starting location tracking: $e');
       return false;
     }
   }
@@ -269,7 +252,6 @@ class StudentLocationService {
 
   // Stop tracking
   void stopTracking() {
-    print('[2025-06-29 09:27:40] devivekrt: Stopping location tracking');
     _positionStream?.cancel();
     _locationUpdateTimer?.cancel();
     _isTracking = false;
@@ -296,11 +278,9 @@ class StudentLocationService {
           _latitude!, _longitude!, targetLatitude, targetLongitude
       );
 
-      print('[2025-06-29 09:27:40] devivekrt: Distance to target: ${distanceInMeters.toStringAsFixed(2)}m, Required: ${radiusMeters}m');
 
       return distanceInMeters <= radiusMeters;
     } catch (e) {
-      print('[2025-06-29 09:27:40] devivekrt: Error calculating distance: $e');
       return false;
     }
   }
@@ -316,7 +296,6 @@ class StudentLocationService {
 
       return distanceInMeters / 1000; // Convert to kilometers
     } catch (e) {
-      print('[2025-06-29 09:27:40] devivekrt: Error calculating distance: $e');
       return null;
     }
   }
@@ -335,9 +314,7 @@ class StudentLocationService {
       _address = null;
       _lastUpdated = null;
 
-      print('[2025-06-29 09:27:40] devivekrt: Cleared location data');
     } catch (e) {
-      print('[2025-06-29 09:27:40] devivekrt: Error clearing location data: $e');
     }
   }
 

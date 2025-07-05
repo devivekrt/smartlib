@@ -32,8 +32,10 @@ class LibraryModel {
   int reviews;
   int students;
   bool? canReview;
+  //Timestamp
+   DateTime? createdAt;
 
-  LibraryModel({
+   LibraryModel({
     this.id,
     this.librarianId,
     this.libraryName,
@@ -61,38 +63,11 @@ class LibraryModel {
     this.rating = 0.0,
     this.reviews = 0,
     this.students = 0,
-  }) : shifts = shifts ?? _getDefaultShifts() {
-    // Ensure shifts is always a Map
-    if (shifts is! Map<String, dynamic>) {
-      this.shifts = _getDefaultShifts();
-    }
-  }
+    this.createdAt,
+  }) : shifts = shifts ?? {};
 
 
 
-  // Default shifts if none provided
-  static Map<String, dynamic> _getDefaultShifts() {
-    return {
-      'morning': {
-        'name': 'Morning',
-        'startTime': '08:00',
-        'endTime': '12:00',
-        'fee': 50
-      },
-      'afternoon': {
-        'name': 'Afternoon',
-        'startTime': '12:00',
-        'endTime': '16:00',
-        'fee': 50
-      },
-      'evening': {
-        'name': 'Evening',
-        'startTime': '16:00',
-        'endTime': '20:00',
-        'fee': 75
-      },
-    };
-  }
 
   // Find the lowest fee among all shifts
   int calculateLowestFee() {
@@ -150,6 +125,7 @@ class LibraryModel {
       'rules': rules,
       'libraryImageUrl': libraryImageUrl,
       'shifts': shifts,
+      'openingHours': openingHours ?? {},
       'lowFee': lowFee,
       'tag': tag,
       'libraryType': libraryType,
@@ -158,6 +134,8 @@ class LibraryModel {
       'rating': rating,
       'reviews': reviews,
       'students': students,
+      'canReview': canReview ?? false,
+      'createdAt': createdAt ?? DateTime.now().toIso8601String() ,
     };
   }
 
@@ -196,8 +174,6 @@ class LibraryModel {
           };
         }
       }
-    } else {
-      shiftsMap = _getDefaultShifts();
     }
 
     // Handle rating - could be int, double or missing
@@ -238,8 +214,16 @@ class LibraryModel {
       reviews: map['reviews'] ?? 0,
       students: map['students'] ?? 0,
       canReview: false,
+
     );
   }
+}
+
+//opening hours model
+class OpeningHoursModel {
+  String? day;
+  String? openTime;
+  String? closeTime;
 }
 
 class ShiftModel {
@@ -258,30 +242,6 @@ class ShiftModel {
       'shiftFee': fee,
     };
   }
-}
-class OpeningHours {
-  String openTime;
-  String closeTime;
-
-  OpeningHours({
-    required this.openTime,
-    required this.closeTime,
-  });
-
-  Map<String, dynamic> toMap() {
-    return {
-      'openTime': openTime,
-      'closeTime': closeTime,
-    };
-  }
-  factory OpeningHours.fromMap(Map<String, dynamic> map) {
-
-    return OpeningHours(
-      openTime: map['openTime'] ?? '00:00',
-      closeTime: map['closeTime'] ?? '00:00',
-    );
-  }
-
 }
 
 class LibraryUtility {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:smartlib/data/string.dart';
 import 'package:smartlib/student/profile_screen.dart';
 import 'package:smartlib/student/qr_code_screen.dart';
@@ -16,6 +17,10 @@ class MainTabScreen extends StatefulWidget {
 
 class _MainTabScreenState extends State<MainTabScreen> {
   int _selectedIndex = 0;
+  DateTime? _lastBackPressTime; // Track last back press time for double back detection
+
+  // Navigation history to handle back button presses
+  final List<int> _navigationHistory = [0]; // Start with home tab in history
 
   // Page widgets: 0=Home, 1=Marketplace, 2=Activity, 3=Profile
   late final List<Widget> _pages = [
@@ -28,11 +33,13 @@ class _MainTabScreenState extends State<MainTabScreen> {
     ProfileScreen(),
   ];
 
-
   void _selectTab(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
+    if (_selectedIndex != index) {
+      setState(() {
+        _selectedIndex = index;
+        _navigationHistory.add(index); // Add to navigation history
+      });
+    }
   }
 
   void _selectQRScan() async {
@@ -44,13 +51,58 @@ class _MainTabScreenState extends State<MainTabScreen> {
     );
   }
 
+  // Handle back button press
+  Future<bool> _handleBackButton() async {
+    // If we're not on the home tab, go back to the previous tab
+    if (_selectedIndex != 0) {
+      // Remove current tab from history
+      _navigationHistory.removeLast();
+
+      // Get the previous tab
+      final previousIndex = _navigationHistory.last;
+
+      setState(() {
+        _selectedIndex = previousIndex;
+      });
+
+      return false; // Don't close the app
+    }
+    // We're on the home tab, check for double back press
+    else {
+      // If this is the first back press or it's been more than 2 seconds since last press
+      final now = DateTime.now();
+      if (_lastBackPressTime == null ||
+          now.difference(_lastBackPressTime!) > const Duration(seconds: 2)) {
+
+        _lastBackPressTime = now;
+
+        // Show warning toast/snackbar
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Press back again to exit'),
+            duration: Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+
+        return false; // Don't close the app yet
+      }
+
+      // This is the second back press within 2 seconds, exit the app
+      return true; // Allow the app to close
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: _pages[_selectedIndex],
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      floatingActionButton: _buildScanButton(),
-      bottomNavigationBar: _buildBottomNavigationBar(),
+    return WillPopScope(
+      onWillPop: _handleBackButton,
+      child: Scaffold(
+        body: _pages[_selectedIndex],
+        floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+        floatingActionButton: _buildScanButton(),
+        bottomNavigationBar: _buildBottomNavigationBar(),
+      ),
     );
   }
 
@@ -105,14 +157,14 @@ class _MainTabScreenState extends State<MainTabScreen> {
   Widget _buildScanButton() {
     return FloatingActionButton(
       onPressed: _selectQRScan,
-      backgroundColor: Color(0xff1940CC),
+      backgroundColor: const Color(0xff1940CC),
       elevation: 6,
-      child: Icon(
+      child: const Icon(
         Icons.qr_code_scanner,
         color: Colors.white,
         size: 28,
       ),
-      shape: CircleBorder(),
+      shape: const CircleBorder(),
     );
   }
 
@@ -133,13 +185,13 @@ class _MainTabScreenState extends State<MainTabScreen> {
           Icon(
             isSelected ? activeIcon : icon,
             size: 24,
-            color: isSelected ? Color(0xff1940CC) : Colors.grey,
+            color: isSelected ? const Color(0xff1940CC) : Colors.grey,
           ),
-          SizedBox(height: 4),
+          const SizedBox(height: 4),
           Text(
             label,
             style: TextStyle(
-              color: isSelected ? Color(0xff1940CC) : Colors.grey,
+              color: isSelected ? const Color(0xff1940CC) : Colors.grey,
               fontSize: 12,
               fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
             ),

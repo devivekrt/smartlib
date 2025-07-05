@@ -12,13 +12,12 @@ class WelcomeScreen extends StatefulWidget {
 }
 
 class _WelcomeScreenState extends State<WelcomeScreen> {
-  final double boxSize = 90.0;
-  final int baseBoxCount = 10;
+  final int baseBoxCount = 15;
   final scrollSpeed = 40;
 
   final List<ScrollController> controllers = List.generate(
     3,
-        (_) => ScrollController(),
+    (_) => ScrollController(),
   );
 
   late List<List<int>> repeatedBoxIndexes;
@@ -108,9 +107,10 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     ];
 
     // Repeat icon list to fill all box count if needed
-    columnIcons = columnIcons.map((list) {
-      return List.generate(baseBoxCount * 3, (i) => list[i % list.length]);
-    }).toList();
+    columnIcons =
+        columnIcons.map((list) {
+          return List.generate(baseBoxCount * 3, (i) => list[i % list.length]);
+        }).toList();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _startAutoScroll();
@@ -124,7 +124,9 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       final controller = controllers[i];
       final direction = scrollDirections[i];
 
-      final timer = Timer.periodic(Duration(milliseconds: scrollSpeed), (timer) {
+      final timer = Timer.periodic(Duration(milliseconds: scrollSpeed), (
+        timer,
+      ) {
         if (!controller.hasClients) return;
 
         double offset = controller.offset + direction;
@@ -154,33 +156,36 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   }
 
   Widget _buildColumn(int index) {
+    final double boxSize = MediaQuery.of(context).size.width * 0.21;
+
     final reverse = index == 0;
 
     return SizedBox(
       width: boxSize,
-      height: MediaQuery.of(context).size.height* 0.5,
+      height: MediaQuery.of(context).size.height * 0.5,
       child: ClipRect(
         child: ListView.builder(
           controller: controllers[index],
           reverse: reverse,
           physics: NeverScrollableScrollPhysics(),
           itemCount: repeatedBoxIndexes[index].length,
-          itemBuilder: (_, i) => Container(
-            margin: EdgeInsets.symmetric(vertical: 25),
-            width: boxSize,
-            height: boxSize,
-            decoration: BoxDecoration(
-              color: _getBoxColor(index, i),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Center(
-              child: Icon(
-                _getIcon(index, i),
-                size: 40,
-                color: Colors.white,
+          itemBuilder:
+              (_, i) => Container(
+                margin: EdgeInsets.symmetric(vertical: 25),
+                width: boxSize,
+                height: boxSize,
+                decoration: BoxDecoration(
+                  color: _getBoxColor(index, i),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Center(
+                  child: Icon(
+                    _getIcon(index, i),
+                    size: 40,
+                    color: Colors.white,
+                  ),
+                ),
               ),
-            ),
-          ),
         ),
       ),
     );
@@ -204,13 +209,19 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   void _navigateToSelectPage() {
     Navigator.pushReplacement(
       context,
-      PageRouteBuilder(
-        pageBuilder: (_, __, ___) => SelectPage(),
-        transitionsBuilder: (_, animation, __, child) {
-          return FadeTransition(opacity: animation, child: child);
-        },
-        transitionDuration: Duration(milliseconds: 500),
-      ),
+        PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) => SelectPage(),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            var begin = Offset(1.0, 0.0);
+            var end = Offset.zero;
+            var curve = Curves.ease;
+
+            var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+            var offsetAnimation = animation.drive(tween);
+
+            return SlideTransition(position: offsetAnimation, child: child);
+          },
+        )
     );
   }
 
@@ -219,7 +230,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     return Scaffold(
       body: Stack(
         children: [
-          // Background gradient (to fill empty space)
           Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
@@ -268,10 +278,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                   Gap(20),
                   Text(
                     "India's 1st Library Seat Booking\nPlatform",
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 16,
-                    ),
+                    style: TextStyle(color: Colors.white70, fontSize: 16),
                     textAlign: TextAlign.center,
                   ),
                   SizedBox(height: 30),

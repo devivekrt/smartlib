@@ -4,54 +4,271 @@ import 'package:gap/gap.dart';
 import 'package:smartlib/models/library_model.dart';
 import 'dart:math' show min;
 import 'package:intl/intl.dart';
+import 'package:smartlib/data/string.dart';
+import 'package:smartlib/function/listen_data.dart';
+import 'package:smartlib/theme/theme.dart';
 
-class LibrarianSeatsPage extends StatelessWidget {
-  final Map<String, dynamic> currentLibrary;
-  final LibraryModel? currentLibraryModel;
-  final Map<String, Map<String, dynamic>> seats;
-  final List<Map<String, dynamic>> todayBookings;
-  final List<String> shifts;
-  final DateTime selectedDate;
-  final String? selectedShift;
-  final bool isLoadingSeats;
-  final Function(DateTime) onDateChange;
-  final Function(String) onShiftChange;
-  final String Function(String) getShiftName;
+class LibrarianSeatsPage extends StatefulWidget {
+  const LibrarianSeatsPage({Key? key}) : super(key: key);
 
-  const LibrarianSeatsPage({
-    Key? key,
-    required this.currentLibrary,
-    required this.currentLibraryModel,
-    required this.seats,
-    required this.todayBookings,
-    required this.shifts,
-    required this.selectedDate,
-    required this.selectedShift,
-    required this.isLoadingSeats,
-    required this.onDateChange,
-    required this.onShiftChange,
-    required this.getShiftName,
-  }) : super(key: key);
+  @override
+  _LibrarianSeatsPageState createState() => _LibrarianSeatsPageState();
+}
+
+class _LibrarianSeatsPageState extends State<LibrarianSeatsPage> {
+  // Firebase reference
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final ListenData _listenData = ListenData();
+
+  // State variables
+  DateTime _selectedDate = DateTime.now();
+  String? _selectedShift;
+  bool _isLoading = true;
+  bool _isLoadingSeats = true;
+
+  // Data variables
+  Map<String, Map<String, dynamic>> _seats = {};
+  List<Map<String, dynamic>> _todayBookings = [];
+  List<String> _shifts = [];
+  Map<String, dynamic> _libraryData = {};
+  LibraryModel? _libraryModel;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  // Load all required data
+  Future<void> _loadData() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // Load library data
+      await _loadLibraryData();
+
+      // Load shifts
+      await _loadShifts();
+
+      // Load seats
+      await _loadSeats();
+
+      // Load today's bookings
+      await _loadBookings();
+
+      setState(() {
+        _isLoading = false;
+      });
+    } catch (e) {
+      print("Error loading data: $e");
+      setState(() {
+        _isLoading = false;
+      });
+
+      // Show error message
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading data. Please try again.'))
+      );
+    }
+  }
+
+  // Load library data
+  Future<void> _loadLibraryData() async {
+    try {
+      // Get library data using libraryId from SmartLib
+      final libraryDoc = await _firestore
+          .collection('libraries')
+          .doc(SmartLib.libraryId)
+          .get();
+
+      if (!libraryDoc.exists) {
+        throw Exception("Library not found");
+      }
+
+      _libraryData = libraryDoc.data() ?? {};
+      _libraryData['id'] = libraryDoc.id;
+
+      // Create LibraryModel from data
+      _libraryModel = LibraryModel.fromMap(_libraryData);
+
+    } catch (e) {
+      print("Error loading library data: $e");
+      throw e;
+    }
+  }
+
+  // Load shifts
+  Future<void> _loadShifts() async {
+    try {
+      if (_libraryModel?.shifts != null) {
+        final shiftsMap = _libraryModel!.shifts;
+        _shifts = shiftsMap.keys.toList();
+
+        // Set default selected shift if none is selected
+        if (_selectedShift == null && _shifts.isNotEmpty) {
+          _selectedShift = _shifts[0];
+        }
+      } else if (_libraryData.containsKey('shifts')) {
+        final shiftsMap = _libraryData['shifts'] as Map<String, dynamic>;
+        _shifts = shiftsMap.keys.toList();
+
+        // Set default selected shift if none is selected
+        if (_selectedShift == null && _shifts.isNotEmpty) {
+          _selectedShift = _shifts[0];
+        }
+      } else {
+        // Use default shifts if none are configured
+        _shifts = ['morning', 'afternoon', 'evening', 'night', 'full_day'];
+
+        // Set default selected shift if none is selected
+        if (_selectedShift == null) {
+          _selectedShift = 'morning';
+        }
+      }
+    } catch (e) {
+      print("Error loading shifts: $e");
+      // Use default shifts as fallback
+      _shifts = ['morning', 'afternoon', 'evening', 'night', 'full_day'];
+      if (_selectedShift == null) {
+        _selectedShift = 'morning';
+      }
+    }
+  }
+
+  // Load seats
+  Future<void> _loadSeats() async {
+    setState(() {
+      _isLoadingSeats = true;
+    });
+
+    try {
+      // Check if seats are in library data
+      if (_libraryData.containsKey('seats') && _libraryData['seats'] is Map) {
+        _seats = Map<String, Map<String, dynamic>>.from(_libraryData['seats']);
+      } else {
+        // If no seats found, try to generate them
+        final totalSeats = int.tryParse(_libraryData['totalSeats']?.toString() ?? '0') ?? 0;
+        if (totalSeats > 0) {
+          // Get shifts for seat generation
+          Map<String, dynamic> shiftsMap = {};
+          if (_libraryModel?.shifts != null) {
+            shiftsMap = _libraryModel!.shifts;
+          } else if (_libraryData.containsKey('shifts')) {
+            shiftsMap = Map<String, dynamic>.from(_libraryData['shifts'] as Map);
+          }
+
+
+          // Reload library data to get the generated seats
+          await _loadLibraryData();
+
+          if (_libraryData.containsKey('seats') && _libraryData['seats'] is Map) {
+            _seats = Map<String, Map<String, dynamic>>.from(_libraryData['seats']);
+          }
+        }
+      }
+    } catch (e) {
+      print("Error loading seats: $e");
+    } finally {
+      setState(() {
+        _isLoadingSeats = false;
+      });
+    }
+  }
+
+  // Load bookings
+  Future<void> _loadBookings() async {
+    try {
+      final formattedDate = DateFormat('dd-MM-yyyy').format(_selectedDate);
+
+      final bookingsSnapshot = await _firestore
+          .collection('seatBookings')
+          .where('libraryId', isEqualTo: SmartLib.libraryId)
+          .where('bookedAt', isEqualTo: formattedDate)
+          .get();
+
+      List<Map<String, dynamic>> bookings = [];
+
+      for (var doc in bookingsSnapshot.docs) {
+        final data = doc.data();
+        data['bookingId'] = doc.id;
+        bookings.add(data);
+      }
+
+      setState(() {
+        _todayBookings = bookings;
+      });
+    } catch (e) {
+      print("Error loading bookings: $e");
+      // If there's an error, use an empty list
+      setState(() {
+        _todayBookings = [];
+      });
+    }
+  }
+
+
+
+  // Handle date change
+  void _onDateChange(DateTime date) {
+    setState(() {
+      _selectedDate = date;
+    });
+    _loadBookings();
+  }
+
+  // Handle shift change
+  void _onShiftChange(String shiftId) {
+    setState(() {
+      _selectedShift = shiftId;
+    });
+  }
+
+  // Get shift name from shift ID
+  String _getShiftName(String shiftId) {
+    // First check if we have a library model with shift data
+    if (_libraryModel?.shifts != null && _libraryModel!.shifts.containsKey(shiftId)) {
+      return _libraryModel!.shifts[shiftId]!['shiftName'] ?? shiftId;
+    }
+
+    // If not, check the library data directly
+    if (_libraryData.containsKey('shifts')) {
+      final shiftsMap = _libraryData['shifts'] as Map<dynamic, dynamic>;
+      if (shiftsMap.containsKey(shiftId)) {
+        return shiftsMap[shiftId]['shiftName'] ?? shiftId;
+      }
+    }
+
+    // Default transformation: capitalize and replace underscores with spaces
+    return shiftId
+        .split('_')
+        .map((word) => word.isNotEmpty ? '${word[0].toUpperCase()}${word.substring(1)}' : '')
+        .join(' ');
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Center(child: CircularProgressIndicator());
+    }
+
     // Get screen width for responsive sizing
     final screenWidth = MediaQuery.of(context).size.width;
     final isSmallScreen = screenWidth < 360;
 
     // Filter bookings for today and selected shift
-    final bookingsForToday =
-        todayBookings
-            .where((b) => b['bookedAt'] == _formatDateToString(selectedDate))
-            .toList();
+    final bookingsForToday = _todayBookings
+        .where((b) => b['bookedAt'] == DateFormat('dd-MM-yyyy').format(_selectedDate))
+        .toList();
 
     // Create a properly typed list for bookingsForShift
     List<Map<String, dynamic>> typedBookingsForShift = [];
 
     // Only populate if we have a selected shift
-    if (selectedShift != null) {
+    if (_selectedShift != null) {
       for (final booking in bookingsForToday) {
-        if (booking['shiftId'] == selectedShift) {
+        if (booking['shiftId'] == _selectedShift) {
           // Ensure each booking is properly typed as Map<String, dynamic>
           typedBookingsForShift.add(Map<String, dynamic>.from(booking));
         }
@@ -59,412 +276,405 @@ class LibrarianSeatsPage extends StatelessWidget {
     }
 
     // Create shift data structure
-    Map<String, Map<String, dynamic>> _shiftsData = {};
-    if (currentLibraryModel?.shifts != null) {
-      _shiftsData = Map<String, Map<String, dynamic>>.from(
-        currentLibraryModel!.shifts,
-      );
+    Map<String, Map<String, dynamic>> shiftsData = {};
+    if (_libraryModel?.shifts != null) {
+      shiftsData = Map<String, Map<String, dynamic>>.from(_libraryModel!.shifts);
+    } else if (_libraryData.containsKey('shifts')) {
+      shiftsData = Map<String, Map<String, dynamic>>.from(_libraryData['shifts'] as Map);
     }
 
-    return Column(
-      children: [
-        // Enhanced date selection component with responsive sizing
-        Container(
-          padding: EdgeInsets.all(isSmallScreen ? 12 : 16),
-          margin: EdgeInsets.symmetric(
-            horizontal: isSmallScreen ? 8 : 12,
-            vertical: isSmallScreen ? 4 : 8,
-          ),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 10,
-                spreadRadius: 0,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Select Date',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              SizedBox(height: isSmallScreen ? 12 : 16),
-              // Responsive date selection
-              SizedBox(
-                height: isSmallScreen ? 80 : 90,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: 7, // Show one week of dates
-                  itemBuilder: (context, index) {
-                    // Generate dates from 3 days ago to 3 days ahead
-                    final date = DateTime.now().add(Duration(days: index - 3));
-
-                    final isToday = _isSameDay(date, DateTime.now());
-                    final isSelected = _isSameDay(date, selectedDate);
-
-                    return GestureDetector(
-                      onTap: () => onDateChange(date),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        margin: EdgeInsets.symmetric(
-                          horizontal: isSmallScreen ? 4 : 6,
-                        ),
-                        width: isSmallScreen ? 55 : 65,
-                        decoration: BoxDecoration(
-                          gradient:
-                              isSelected
-                                  ? LinearGradient(
-                                    colors: [
-                                      const Color(0xff1940CC),
-                                      const Color(0xff1940CC).withOpacity(0.8),
-                                    ],
-                                    begin: Alignment.topCenter,
-                                    end: Alignment.bottomCenter,
-                                  )
-                                  : null,
-                          color:
-                              isSelected
-                                  ? null
-                                  : isToday
-                                  ? const Color(0xff1940CC).withOpacity(0.1)
-                                  : Colors.grey[200],
-                          borderRadius: BorderRadius.circular(12),
-                          border:
-                              isToday && !isSelected
-                                  ? Border.all(color: const Color(0xff1940CC))
-                                  : null,
-                          boxShadow:
-                              isSelected
-                                  ? [
-                                    BoxShadow(
-                                      color: const Color(
-                                        0xff1940CC,
-                                      ).withOpacity(0.3),
-                                      blurRadius: 8,
-                                      spreadRadius: 1,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ]
-                                  : null,
-                        ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            // Day name (Mon, Tue, etc.)
-                            Text(
-                              _getWeekdayName(date),
-                              style: TextStyle(
-                                fontSize: isSmallScreen ? 10 : 12,
-                                fontWeight: FontWeight.w500,
-                                color:
-                                    isSelected
-                                        ? Colors.white
-                                        : Colors.grey[700],
-                              ),
-                            ),
-                            SizedBox(height: isSmallScreen ? 4 : 6),
-
-                            // Day number
-                            Text(
-                              '${date.day}',
-                              style: TextStyle(
-                                fontSize: isSmallScreen ? 18 : 22,
-                                fontWeight: FontWeight.bold,
-                                color:
-                                    isSelected
-                                        ? Colors.white
-                                        : isToday
-                                        ? const Color(0xff1940CC)
-                                        : Colors.black87,
-                              ),
-                            ),
-                            SizedBox(height: isSmallScreen ? 2 : 4),
-
-                            // Month name (short)
-                            Text(
-                              _getMonthName(date.month),
-                              style: TextStyle(
-                                fontSize: isSmallScreen ? 10 : 12,
-                                color:
-                                    isSelected
-                                        ? Colors.white
-                                        : Colors.grey[700],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
+    return RefreshIndicator(
+      onRefresh: _loadData,
+      child: Column(
+        children: [
+          // Enhanced date selection component with responsive sizing
+          Container(
+            padding: EdgeInsets.all(isSmallScreen ? 12 : 16),
+            margin: EdgeInsets.symmetric(
+              horizontal: isSmallScreen ? 8 : 12,
+              vertical: isSmallScreen ? 4 : 8,
+            ),
+            decoration: BoxDecoration(
+              color: DarkColor.cardColor,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  spreadRadius: 0,
+                  offset: const Offset(0, 2),
                 ),
-              ),
-
-              // Help text
-              const SizedBox(height: 4),
-              Text(
-                'Tap on a date to select it',
-                style: TextStyle(fontSize: 10, color: Colors.grey),
-              ),
-            ],
-          ),
-        ),
-
-        // Improved shift selection with better responsive UI
-        Card(
-          margin: EdgeInsets.symmetric(
-            horizontal: isSmallScreen ? 8 : 12,
-            vertical: isSmallScreen ? 4 : 6,
-          ),
-          elevation: 2,
-          child: Padding(
-            padding: EdgeInsets.all(isSmallScreen ? 8 : 12),
+              ],
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Select Shift:',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                Text(
+                  'Select Date',
+                  style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white
+                  ),
                 ),
-                SizedBox(height: isSmallScreen ? 8 : 12),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  physics: const BouncingScrollPhysics(),
-                  child: Row(
-                    children:
-                        shifts.map((shiftId) {
-                          final isSelected = selectedShift == shiftId;
+                SizedBox(height: isSmallScreen ? 12 : 16),
+                // Responsive date selection
+                SizedBox(
+                  height: isSmallScreen ? 80 : 90,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: 30, // Show one week of dates
+                    itemBuilder: (context, index) {
+                      // Generate dates from today to 30days forward
+                      final date = DateTime.now().add(Duration(days: index));
 
-                          // Determine shift color based on index
-                          Color shiftColor;
-                          int index = shifts.indexOf(shiftId);
-                          switch (index % 3) {
-                            case 0:
-                              shiftColor = Colors.blue;
-                              break;
-                            case 1:
-                              shiftColor = Colors.amber;
-                              break;
-                            default:
-                              shiftColor = Colors.deepPurple;
-                          }
+                      final isToday = _isSameDay(date, DateTime.now());
+                      final isSelected = _isSameDay(date, _selectedDate);
 
-                          // Get shift details from library model if available
-                          Map<String, dynamic> shiftDetails = {};
-                          if (_shiftsData.containsKey(shiftId)) {
-                            shiftDetails = _shiftsData[shiftId]!;
-                          }
-
-                          final shiftName =
-                              shiftDetails['shiftName'] ??
-                              getShiftName(shiftId);
-                          final startTime =
-                              shiftDetails['shiftStartTime'] ?? '00:00';
-                          final endTime =
-                              shiftDetails['shiftEndTime'] ?? '00:00';
-
-                          // Make shift buttons more compact on small screens
-                          return Container(
-                            margin: EdgeInsets.only(
-                              right: isSmallScreen ? 8 : 12,
-                            ),
-                            child: InkWell(
-                              onTap: () => onShiftChange(shiftId),
-                              borderRadius: BorderRadius.circular(12),
-                              child: Container(
-                                padding: EdgeInsets.all(isSmallScreen ? 8 : 12),
-                                decoration: BoxDecoration(
-                                  gradient:
-                                      isSelected
-                                          ? LinearGradient(
-                                            colors: [
-                                              shiftColor,
-                                              shiftColor.withOpacity(0.7),
-                                            ],
-                                            begin: Alignment.topLeft,
-                                            end: Alignment.bottomRight,
-                                          )
-                                          : null,
-                                  color: isSelected ? null : Colors.grey[200],
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color:
-                                        isSelected
-                                            ? shiftColor
-                                            : Colors.grey.shade400,
-                                    width: isSelected ? 2 : 1,
-                                  ),
-                                ),
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          Icons.access_time,
-                                          color:
-                                              isSelected
-                                                  ? Colors.white
-                                                  : shiftColor,
-                                          size: isSmallScreen ? 16 : 20,
-                                        ),
-                                        SizedBox(width: isSmallScreen ? 4 : 8),
-                                        Text(
-                                          shiftName,
-                                          style: TextStyle(
-                                            fontSize: isSmallScreen ? 12 : 14,
-                                            fontWeight: FontWeight.bold,
-                                            color:
-                                                isSelected
-                                                    ? Colors.white
-                                                    : Colors.black87,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    SizedBox(height: isSmallScreen ? 6 : 8),
-                                    Container(
-                                      padding: EdgeInsets.symmetric(
-                                        horizontal: isSmallScreen ? 6 : 8,
-                                        vertical: isSmallScreen ? 2 : 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color:
-                                            isSelected
-                                                ? Colors.white.withOpacity(0.3)
-                                                : shiftColor.withOpacity(0.1),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Text(
-                                        "$startTime - $endTime",
-                                        style: TextStyle(
-                                          fontSize: isSmallScreen ? 10 : 12,
-                                          fontWeight: FontWeight.bold,
-                                          color:
-                                              isSelected
-                                                  ? Colors.white
-                                                  : shiftColor,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
+                      return GestureDetector(
+                        onTap: () => _onDateChange(date),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          margin: EdgeInsets.symmetric(
+                            horizontal: isSmallScreen ? 4 : 6,
+                          ),
+                          width: isSmallScreen ? 55 : 65,
+                          decoration: BoxDecoration(
+                            gradient: isSelected
+                                ? LinearGradient(
+                              colors: [
+                                DarkColor.highlightColor,
+                                DarkColor.highlightColor.withOpacity(0.8),
+                              ],
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                            )
+                                : null,
+                            color: isSelected
+                                ? null
+                                : isToday
+                                ? DarkColor.highlightColor.withOpacity(0.1)
+                                : DarkColor.cardColor,
+                            borderRadius: BorderRadius.circular(12),
+                            border: isToday && !isSelected
+                                ? Border.all(color: DarkColor.highlightColor)
+                                : Border.all(color: Colors.grey.withOpacity(0.2)),
+                            boxShadow: isSelected
+                                ? [
+                              BoxShadow(
+                                color: DarkColor.highlightColor.withOpacity(0.3),
+                                blurRadius: 8,
+                                spreadRadius: 1,
+                                offset: const Offset(0, 4),
+                              ),
+                            ]
+                                : null,
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              // Day name (Mon, Tue, etc.)
+                              Text(
+                                _getWeekdayName(date),
+                                style: TextStyle(
+                                  fontSize: isSmallScreen ? 10 : 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: isSelected
+                                      ? Colors.white
+                                      : Colors.grey[400],
                                 ),
                               ),
-                            ),
-                          );
-                        }).toList(),
+                              SizedBox(height: isSmallScreen ? 4 : 6),
+
+                              // Day number
+                              Text(
+                                '${date.day}',
+                                style: TextStyle(
+                                  fontSize: isSmallScreen ? 18 : 22,
+                                  fontWeight: FontWeight.bold,
+                                  color: isSelected
+                                      ? Colors.white
+                                      : isToday
+                                      ? DarkColor.highlightColor
+                                      : Colors.white,
+                                ),
+                              ),
+                              SizedBox(height: isSmallScreen ? 2 : 4),
+
+                              // Month name (short)
+                              Text(
+                                _getMonthName(date.month),
+                                style: TextStyle(
+                                  fontSize: isSmallScreen ? 10 : 12,
+                                  color: isSelected
+                                      ? Colors.white
+                                      : Colors.grey[400],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
               ],
             ),
           ),
-        ),
-        const Gap(12),
 
-        // Improved seat legend with clearer status indicators
-        Padding(
-          padding: EdgeInsets.symmetric(horizontal: isSmallScreen ? 12 : 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Seat Status:',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+          // Improved shift selection with better responsive UI
+          Card(
+            margin: EdgeInsets.symmetric(
+              horizontal: isSmallScreen ? 8 : 12,
+              vertical: isSmallScreen ? 4 : 6,
+            ),
+            color: DarkColor.cardColor,
+            elevation: 2,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Padding(
+              padding: EdgeInsets.all(isSmallScreen ? 8 : 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Select Shift:',
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white
+                    ),
+                  ),
+                  SizedBox(height: isSmallScreen ? 8 : 12),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
+                    child: Row(
+                      children: _shifts.map((shiftId) {
+                        final isSelected = _selectedShift == shiftId;
+
+                        // Determine shift color based on index
+                        Color shiftColor;
+                        int index = _shifts.indexOf(shiftId);
+                        switch (index % 3) {
+                          case 0:
+                            shiftColor = Colors.blue;
+                            break;
+                          case 1:
+                            shiftColor = Colors.amber;
+                            break;
+                          default:
+                            shiftColor = Colors.deepPurple;
+                        }
+
+                        // Get shift details from data structures
+                        Map<String, dynamic>? shiftDetails;
+
+                        if (shiftsData.containsKey(shiftId)) {
+                          shiftDetails = shiftsData[shiftId];
+                        }
+
+                        final shiftName = shiftDetails?['shiftName'] ?? _getShiftName(shiftId);
+                        final startTime = shiftDetails?['shiftStartTime'] ?? '00:00';
+                        final endTime = shiftDetails?['shiftEndTime'] ?? '00:00';
+
+                        // Make shift buttons more compact on small screens
+                        return Container(
+                          margin: EdgeInsets.only(
+                            right: isSmallScreen ? 8 : 12,
+                          ),
+                          child: InkWell(
+                            onTap: () => _onShiftChange(shiftId),
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
+                              padding: EdgeInsets.all(isSmallScreen ? 8 : 12),
+                              decoration: BoxDecoration(
+                                gradient: isSelected
+                                    ? LinearGradient(
+                                  colors: [
+                                    shiftColor,
+                                    shiftColor.withOpacity(0.7),
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                )
+                                    : null,
+                                color: isSelected ? null : DarkColor.cardColor,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: isSelected
+                                      ? shiftColor
+                                      : Colors.grey.shade700,
+                                  width: isSelected ? 2 : 1,
+                                ),
+                              ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.access_time,
+                                        color: isSelected
+                                            ? Colors.white
+                                            : shiftColor,
+                                        size: isSmallScreen ? 16 : 20,
+                                      ),
+                                      SizedBox(width: isSmallScreen ? 4 : 8),
+                                      Text(
+                                        shiftName,
+                                        style: TextStyle(
+                                          fontSize: isSmallScreen ? 12 : 14,
+                                          fontWeight: FontWeight.bold,
+                                          color: isSelected
+                                              ? Colors.white
+                                              : Colors.white,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  SizedBox(height: isSmallScreen ? 6 : 8),
+                                  Container(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: isSmallScreen ? 6 : 8,
+                                      vertical: isSmallScreen ? 2 : 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: isSelected
+                                          ? Colors.white.withOpacity(0.3)
+                                          : shiftColor.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      "$startTime - $endTime",
+                                      style: TextStyle(
+                                        fontSize: isSmallScreen ? 10 : 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: isSelected
+                                            ? Colors.white
+                                            : shiftColor,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 8),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    _buildImprovedLegendItem(
-                      Colors.green,
-                      'Available',
-                      isSmallScreen,
-                    ),
-                    SizedBox(width: isSmallScreen ? 12 : 16),
-                    _buildImprovedLegendItem(
-                      Colors.orange,
-                      'Pending',
-                      isSmallScreen,
-                    ),
-                    SizedBox(width: isSmallScreen ? 12 : 16),
-                    _buildImprovedLegendItem(
-                      Colors.red,
-                      'Booked',
-                      isSmallScreen,
-                    ),
-                  ],
-                ),
-              ),
-            ],
+            ),
           ),
-        ),
-        const Gap(12),
+          const Gap(12),
 
-        // Improved seat map grid with responsive sizing
-        Expanded(
-          child:
-              isLoadingSeats
-                  ? const Center(child: CircularProgressIndicator())
-                  : selectedShift == null
-                  ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.event_seat_outlined,
-                          size: isSmallScreen ? 48 : 64,
-                          color: Colors.grey[400],
-                        ),
-                        SizedBox(height: isSmallScreen ? 12 : 16),
-                        Text(
-                          'Select a shift to view seats',
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: isSmallScreen ? 14 : 16,
-                          ),
-                        ),
-                      ],
+          // Improved seat legend with clearer status indicators
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: isSmallScreen ? 12 : 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Seat Status:',
+                  style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _buildImprovedLegendItem(
+                        Colors.green,
+                        'Available',
+                        isSmallScreen,
+                      ),
+                      SizedBox(width: isSmallScreen ? 12 : 16),
+                      _buildImprovedLegendItem(
+                        Colors.orange,
+                        'Pending',
+                        isSmallScreen,
+                      ),
+                      SizedBox(width: isSmallScreen ? 12 : 16),
+                      _buildImprovedLegendItem(
+                        Colors.red,
+                        'Booked',
+                        isSmallScreen,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Gap(12),
+
+          // Improved seat map grid with responsive sizing
+          Expanded(
+            child: _isLoadingSeats
+                ? const Center(child: CircularProgressIndicator())
+                : _selectedShift == null
+                ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.event_seat_outlined,
+                    size: isSmallScreen ? 48 : 64,
+                    color: Colors.grey[400],
+                  ),
+                  SizedBox(height: isSmallScreen ? 12 : 16),
+                  Text(
+                    'Select a shift to view seats',
+                    style: TextStyle(
+                      color: Colors.grey[400],
+                      fontSize: isSmallScreen ? 14 : 16,
                     ),
-                  )
-                  : seats.isEmpty
-                  ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.grid_off,
-                          size: isSmallScreen ? 48 : 64,
-                          color: Colors.grey[400],
-                        ),
-                        SizedBox(height: isSmallScreen ? 12 : 16),
-                        Text(
-                          'No seats found for this library',
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: isSmallScreen ? 14 : 16,
-                          ),
-                        ),
-                      ],
+                  ),
+                ],
+              ),
+            )
+                : _seats.isEmpty
+                ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.grid_off,
+                    size: isSmallScreen ? 48 : 64,
+                    color: Colors.grey[400],
+                  ),
+                  SizedBox(height: isSmallScreen ? 12 : 16),
+                  Text(
+                    'No seats found for this library',
+                    style: TextStyle(
+                      color: Colors.grey[400],
+                      fontSize: isSmallScreen ? 14 : 16,
                     ),
-                  )
-                  : _buildResponsiveSeatMap(context, typedBookingsForShift),
-        ),
-      ],
+                  ),
+                ],
+              ),
+            )
+                : _buildResponsiveSeatMap(context, typedBookingsForShift),
+          ),
+        ],
+      ),
     );
   }
 
   // Improved legend item with better visibility
   Widget _buildImprovedLegendItem(
-    Color color,
-    String label,
-    bool isSmallScreen,
-  ) {
+      Color color,
+      String label,
+      bool isSmallScreen,
+      ) {
     return Row(
       children: [
         Stack(
@@ -499,6 +709,7 @@ class LibrarianSeatsPage extends StatelessWidget {
           style: TextStyle(
             fontSize: isSmallScreen ? 12 : 14,
             fontWeight: FontWeight.w500,
+            color: Colors.white,
           ),
         ),
       ],
@@ -507,9 +718,9 @@ class LibrarianSeatsPage extends StatelessWidget {
 
   // Responsive seat map with better layout for small screens
   Widget _buildResponsiveSeatMap(
-    BuildContext context,
-    List<Map<String, dynamic>> bookingsForShift,
-  ) {
+      BuildContext context,
+      List<Map<String, dynamic>> bookingsForShift,
+      ) {
     final isSmallScreen = MediaQuery.of(context).size.width < 360;
 
     // Create maps of seat information based on bookings
@@ -529,7 +740,7 @@ class LibrarianSeatsPage extends StatelessWidget {
     // Process seats into rows for better organization
     Map<String, List<MapEntry<String, Map<String, dynamic>>>> seatsByRow = {};
 
-    seats.entries.forEach((entry) {
+    _seats.entries.forEach((entry) {
       final seatId = entry.key;
       if (seatId.isNotEmpty) {
         try {
@@ -561,7 +772,7 @@ class LibrarianSeatsPage extends StatelessWidget {
             Text(
               'No seat layout available',
               style: TextStyle(
-                color: Colors.grey[600],
+                color: Colors.grey[400],
                 fontSize: isSmallScreen ? 14 : 16,
               ),
             ),
@@ -569,7 +780,7 @@ class LibrarianSeatsPage extends StatelessWidget {
             Text(
               'This library doesn\'t have a configured seat layout',
               style: TextStyle(
-                color: Colors.grey[500],
+                color: Colors.grey[400],
                 fontSize: isSmallScreen ? 12 : 14,
               ),
             ),
@@ -632,15 +843,15 @@ class LibrarianSeatsPage extends StatelessWidget {
 
   // Helper to build a responsive row of seats
   Widget _buildResponsiveSeatsRow(
-    BuildContext context,
-    String row,
-    List<MapEntry<String, Map<String, dynamic>>> seats,
-    Map<String, String> seatStatus,
-    Map<String, String> seatStudentIds,
-    Map<String, Map<String, dynamic>> bookingDetails, {
-    bool isSubRow = false,
-    String? rowIndicator,
-  }) {
+      BuildContext context,
+      String row,
+      List<MapEntry<String, Map<String, dynamic>>> seats,
+      Map<String, String> seatStatus,
+      Map<String, String> seatStudentIds,
+      Map<String, Map<String, dynamic>> bookingDetails, {
+        bool isSubRow = false,
+        String? rowIndicator,
+      }) {
     final isSmallScreen = MediaQuery.of(context).size.width < 360;
     final seatSize = isSmallScreen ? 40.0 : 48.0;
 
@@ -661,10 +872,10 @@ class LibrarianSeatsPage extends StatelessWidget {
                 vertical: isSmallScreen ? 2 : 4,
               ),
               decoration: BoxDecoration(
-                color: const Color(0xff1940CC).withOpacity(0.1),
+                color: DarkColor.highlightColor.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: const Color(0xff1940CC).withOpacity(0.3),
+                  color: DarkColor.highlightColor.withOpacity(0.3),
                   width: 1,
                 ),
               ),
@@ -673,7 +884,7 @@ class LibrarianSeatsPage extends StatelessWidget {
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: isSmallScreen ? 12 : 14,
-                  color: const Color(0xff1940CC),
+                  color: DarkColor.highlightColor,
                 ),
               ),
             ),
@@ -690,182 +901,191 @@ class LibrarianSeatsPage extends StatelessWidget {
             physics: const BouncingScrollPhysics(),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children:
-                  seats.map((entry) {
-                    final seatId = entry.key;
-                    final seatData = entry.value;
+              children: seats.map((entry) {
+                final seatId = entry.key;
+                final seatData = entry.value;
 
-                    // Extract seat number (removing the row letter)
-                    final seatNumber =
-                        seatId.length > 1 ? seatId.substring(1) : seatId;
+                // Extract seat number (removing the row letter)
+                final seatNumber =
+                seatId.length > 1 ? seatId.substring(1) : seatId;
 
-                    // Check shift status for this seat
-                    bool isPartiallyBooked = false;
-                    String status = 'available';
-                    String studentId = '';
+                // Check shift status for this seat
+                bool isPartiallyBooked = false;
+                String status = 'available';
+                String studentId = '';
 
-                    // First check if there's an active booking for this seat
-                    if (seatStatus.containsKey(seatId)) {
-                      status = seatStatus[seatId]!;
-                      studentId = seatStudentIds[seatId] ?? '';
-                    }
-                    // Otherwise check the seat data structure
-                    else if (seatData.containsKey('shifts')) {
-                      Map<String, dynamic> shiftsData = seatData['shifts'];
-                      int availableShifts = 0;
-                      int bookedShifts = 0;
+                // First check if there's an active booking for this seat
+                if (seatStatus.containsKey(seatId)) {
+                  status = seatStatus[seatId]!;
+                  studentId = seatStudentIds[seatId] ?? '';
+                }
+                // Otherwise check the seat data structure
+                else if (seatData.containsKey('shifts')) {
+                  Map<String, dynamic> shiftsData = seatData['shifts'];
+                  int availableShifts = 0;
+                  int bookedShifts = 0;
 
-                      // Check all shifts status
-                      if (shiftsData is Map) {
-                        shiftsData.entries.forEach((shift) {
-                          if (shift.value is Map &&
-                              shift.value['status'] != null) {
-                            if (shift.value['status'] == 'available') {
-                              availableShifts++;
-                            } else if (shift.value['status'] == 'booked' ||
-                                shift.value['status'] == 'confirmed') {
-                              bookedShifts++;
-                              // If this is our selected shift, get the student ID
-                              if (selectedShift != null &&
-                                  shift.key == selectedShift) {
-                                studentId = shift.value['bookedBy'] ?? '';
-                              }
-                            }
-                          }
-                        });
-
-                        // Check selected shift status specifically
-                        if (selectedShift != null &&
-                            shiftsData.containsKey(selectedShift)) {
-                          final shiftData = shiftsData[selectedShift];
-                          if (shiftData is Map &&
-                              shiftData.containsKey('status')) {
-                            status = shiftData['status'].toString();
+                  // Check all shifts status
+                  if (shiftsData is Map) {
+                    shiftsData.entries.forEach((shift) {
+                      if (shift.value is Map &&
+                          shift.value['status'] != null) {
+                        if (shift.value['status'] == 'available') {
+                          availableShifts++;
+                        } else if (shift.value['status'] == 'booked' ||
+                            shift.value['status'] == 'confirmed') {
+                          bookedShifts++;
+                          // If this is our selected shift, get the student ID
+                          if (_selectedShift != null &&
+                              shift.key == _selectedShift) {
+                            studentId = shift.value['bookedBy'] ?? '';
                           }
                         }
+                      }
+                    });
 
-                        // Check if partially booked (some shifts available, some booked)
-                        isPartiallyBooked =
-                            availableShifts > 0 && bookedShifts > 0;
+                    // Check selected shift status specifically
+                    if (_selectedShift != null &&
+                        shiftsData.containsKey(_selectedShift)) {
+                      final shiftData = shiftsData[_selectedShift];
+                      if (shiftData is Map &&
+                          shiftData.containsKey('status')) {
+                        status = shiftData['status'].toString();
                       }
                     }
 
-                    // Determine color and icon based on status
-                    Color seatColor;
-                    IconData? seatIcon;
+                    // Check if partially booked (some shifts available, some booked)
+                    isPartiallyBooked =
+                        availableShifts > 0 && bookedShifts > 0;
+                  }
+                }
 
-                    switch (status.toLowerCase()) {
-                      case 'booked':
-                        seatColor = Colors.red.shade600;
-                        seatIcon = Icons.person;
-                        break;
-                      case 'pending':
-                        seatColor = Colors.orange.shade500;
-                        seatIcon = Icons.hourglass_top;
-                        break;
-                      case 'available':
-                      default:
-                        seatColor =
-                            isPartiallyBooked
-                                ? Colors.amber.shade500
-                                : Colors.green.shade500;
-                        seatIcon = isPartiallyBooked ? Icons.access_time : null;
-                    }
+                // Determine color and icon based on status
+                Color seatColor;
+                IconData? seatIcon;
 
-                    return Container(
-                      width: seatSize,
-                      height: seatSize,
-                      margin: EdgeInsets.symmetric(
-                        horizontal: isSmallScreen ? 3 : 4,
-                      ),
-                      child: GestureDetector(
-                        onTap: () {
-                          if (studentId.isNotEmpty) {
-                            _showModernStudentDetailsDialog(
-                              context,
-                              seatId,
-                              studentId,
-                              bookingDetails,
-                            );
-                          }
-                        },
-                        child: Container(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [seatColor, seatColor.withOpacity(0.8)],
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                            ),
-                            borderRadius: BorderRadius.circular(8),
-                            boxShadow: [
-                              BoxShadow(
-                                color: seatColor.withOpacity(0.4),
-                                blurRadius: 4,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                            border: Border.all(
-                              color: Colors.white.withOpacity(0.3),
-                              width: 1,
-                            ),
+                switch (status.toLowerCase()) {
+                  case 'booked':
+                  case 'confirmed':
+                  case 'active':
+                    seatColor = Colors.red.shade600;
+                    seatIcon = Icons.person;
+                    break;
+                  case 'pending':
+                    seatColor = Colors.orange.shade500;
+                    seatIcon = Icons.hourglass_top;
+                    break;
+                  case 'available':
+                  default:
+                    seatColor =
+                    isPartiallyBooked
+                        ? Colors.amber.shade500
+                        : Colors.green.shade500;
+                    seatIcon = isPartiallyBooked ? Icons.access_time : null;
+                }
+
+                return Container(
+                  width: seatSize,
+                  height: seatSize,
+                  margin: EdgeInsets.symmetric(
+                    horizontal: isSmallScreen ? 3 : 4,
+                  ),
+                  child: GestureDetector(
+                    onTap: () {
+                      if (studentId.isNotEmpty) {
+                        _showModernStudentDetailsDialog(
+                          context,
+                          seatId,
+                          studentId,
+                          bookingDetails,
+                        );
+                      } else {
+                        // Show seat status dialog for available seats
+                        _showSeatStatusDialog(
+                          context,
+                          seatId,
+                          status,
+                          isPartiallyBooked,
+                        );
+                      }
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [seatColor, seatColor.withOpacity(0.8)],
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: [
+                          BoxShadow(
+                            color: seatColor.withOpacity(0.4),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
                           ),
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              // Seat icon if applicable
-                              if (seatIcon != null)
-                                Positioned(
-                                  top: 2,
-                                  right: 2,
-                                  child: Icon(
-                                    seatIcon,
-                                    size: isSmallScreen ? 10 : 12,
-                                    color: Colors.white.withOpacity(0.9),
-                                  ),
-                                ),
-
-                              // Seat number
-                              Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    row,
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w500,
-                                      fontSize: isSmallScreen ? 10 : 12,
-                                    ),
-                                  ),
-                                  Text(
-                                    seatNumber,
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: isSmallScreen ? 14 : 16,
-                                    ),
-                                  ),
-                                ],
-                              ),
-
-                              // Indicator if seat has student
-                              if (studentId.isNotEmpty)
-                                Positioned(
-                                  bottom: 4,
-                                  child: Container(
-                                    height: 4,
-                                    width: seatSize * 0.6,
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withOpacity(0.8),
-                                      borderRadius: BorderRadius.circular(2),
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
+                        ],
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.3),
+                          width: 1,
                         ),
                       ),
-                    );
-                  }).toList(),
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // Seat icon if applicable
+                          if (seatIcon != null)
+                            Positioned(
+                              top: 2,
+                              right: 2,
+                              child: Icon(
+                                seatIcon,
+                                size: isSmallScreen ? 10 : 12,
+                                color: Colors.white.withOpacity(0.9),
+                              ),
+                            ),
+
+                          // Seat number
+                          Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                row,
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w500,
+                                  fontSize: isSmallScreen ? 10 : 12,
+                                ),
+                              ),
+                              Text(
+                                seatNumber,
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: isSmallScreen ? 14 : 16,
+                                ),
+                              ),
+                            ],
+                          ),
+
+                          // Indicator if seat has student
+                          if (studentId.isNotEmpty)
+                            Positioned(
+                              bottom: 4,
+                              child: Container(
+                                height: 4,
+                                width: seatSize * 0.6,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.8),
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
             ),
           ),
         ),
@@ -873,20 +1093,107 @@ class LibrarianSeatsPage extends StatelessWidget {
     );
   }
 
+  // Show seat status dialog for available seats
+  void _showSeatStatusDialog(
+      BuildContext context,
+      String seatId,
+      String status,
+      bool isPartiallyBooked,
+      ) {
+    final isSmallScreen = MediaQuery.of(context).size.width < 360;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: DarkColor.cardColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: Text(
+          'Seat $seatId',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              status.toLowerCase() == 'available' ? Icons.check_circle : Icons.info,
+              color: status.toLowerCase() == 'available' ? Colors.green : Colors.orange,
+              size: 48,
+            ),
+            SizedBox(height: 16),
+            Text(
+              isPartiallyBooked
+                  ? 'This seat is partially booked (booked for some shifts)'
+                  : status.toLowerCase() == 'available'
+                  ? 'This seat is available for booking'
+                  : 'This seat is ${status.toLowerCase()}',
+              style: TextStyle(color: Colors.white, fontSize: 16),
+              textAlign: TextAlign.center,
+            ),
+            if (_selectedShift != null) ...[
+              SizedBox(height: 8),
+              Text(
+                'Shift: ${_getShiftName(_selectedShift!)}',
+                style: TextStyle(color: Colors.grey[400]),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Close',
+              style: TextStyle(color: DarkColor.highlightColor),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              // TODO: Navigate to booking creation screen
+              // This would be implemented based on your app's navigation structure
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: DarkColor.highlightColor,
+            ),
+            child: Text('Book Seat'),
+          ),
+        ],
+      ),
+    );
+  }
+
   // Improved student details dialog with modern UI
   void _showModernStudentDetailsDialog(
-    BuildContext context,
-    String seatId,
-    String studentId,
-    Map<String, Map<String, dynamic>> bookingDetails,
-  ) async {
+      BuildContext context,
+      String seatId,
+      String studentId,
+      Map<String, Map<String, dynamic>> bookingDetails,
+      ) async {
     final isSmallScreen = MediaQuery.of(context).size.width < 360;
 
     // Show loading dialog first
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const Center(child: CircularProgressIndicator()),
+      builder: (context) => Center(
+        child: Container(
+          padding: EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: DarkColor.cardColor,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(color: DarkColor.highlightColor),
+              SizedBox(height: 16),
+              Text('Loading student details...', style: TextStyle(color: Colors.white)),
+            ],
+          ),
+        ),
+      ),
     );
 
     try {
@@ -897,15 +1204,15 @@ class LibrarianSeatsPage extends StatelessWidget {
       // Get subscriber data from Firestore
       DocumentSnapshot? subscriberData;
 
-      if (currentLibrary['id'] != null) {
+      if (SmartLib.libraryId.isNotEmpty) {
         try {
           subscriberData =
-              await FirebaseFirestore.instance
-                  .collection('libraries')
-                  .doc(currentLibrary['id'])
-                  .collection('subscribers')
-                  .doc(studentId)
-                  .get();
+          await FirebaseFirestore.instance
+              .collection('libraries')
+              .doc(SmartLib.libraryId)
+              .collection('subscribers')
+              .doc(studentId)
+              .get();
         } catch (e) {
           print('Error fetching subscriber data: $e');
         }
@@ -917,244 +1224,248 @@ class LibrarianSeatsPage extends StatelessWidget {
       // Extract student data
       final studentName =
           subscriberData?.get('studentName') ??
-          booking?['studentName'] ??
-          'Not available';
+              booking?['studentName'] ??
+              'Not available';
       final studentEmail =
-          subscriberData?.exists == true ? subscriberData?.get('email') : null;
+      subscriberData?.exists == true ? subscriberData?.get('email') : null;
       final studentPhone =
-          subscriberData?.exists == true ? subscriberData?.get('phone') : null;
+      subscriberData?.exists == true ? subscriberData?.get('phone') : null;
       final status =
           booking?['status'] ??
-          subscriberData?.get('subscriptionStatus') ??
-          'Unknown';
+              subscriberData?.get('subscriptionStatus') ??
+              'Unknown';
       final paymentStatus =
           booking?['paymentStatus'] ??
-          subscriberData?.get('paymentStatus') ??
-          'Unknown';
+              subscriberData?.get('paymentStatus') ??
+              'Unknown';
       final shiftName =
           booking?['shiftName'] ??
-          subscriberData?.get('shiftName') ??
-          'Unknown';
+              subscriberData?.get('shiftName') ??
+              'Unknown';
       final shiftStartTime =
           booking?['shiftStartTime'] ??
-          subscriberData?.get('shiftStartTime') ??
-          'N/A';
+              subscriberData?.get('shiftStartTime') ??
+              'N/A';
       final shiftEndTime =
           booking?['shiftEndTime'] ??
-          subscriberData?.get('shiftEndTime') ??
-          'N/A';
+              subscriberData?.get('shiftEndTime') ??
+              'N/A';
       final dueDate =
           booking?['dueDate'] ??
-          (subscriberData?.exists == true
-              ? subscriberData?.get('dueDate')
-              : null);
+              (subscriberData?.exists == true
+                  ? subscriberData?.get('dueDate')
+                  : null);
 
       // Now show the modernized detailed dialog
       showDialog(
         context: context,
-        builder:
-            (context) => Dialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
-              elevation: 8,
-              child: Container(
-                width: double.infinity,
-                constraints: BoxConstraints(
-                  maxWidth: 500,
-                  maxHeight: MediaQuery.of(context).size.height * 0.8,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Header
-                    Container(
-                      decoration: BoxDecoration(
-                        color: const Color(0xff1940CC),
-                        borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(20),
-                          topRight: Radius.circular(20),
+        builder: (context) => Dialog(
+          backgroundColor: DarkColor.cardColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          elevation: 8,
+          child: Container(
+            width: double.infinity,
+            constraints: BoxConstraints(
+              maxWidth: 500,
+              maxHeight: MediaQuery.of(context).size.height * 0.8,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header
+                Container(
+                  decoration: BoxDecoration(
+                    color: DarkColor.highlightColor,
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(20),
+                      topRight: Radius.circular(20),
+                    ),
+                  ),
+                  padding: EdgeInsets.symmetric(
+                    vertical: isSmallScreen ? 16 : 20,
+                    horizontal: isSmallScreen ? 16 : 24,
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: isSmallScreen ? 36 : 48,
+                        height: isSmallScreen ? 36 : 48,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Center(
+                          child: Icon(
+                            Icons.person,
+                            color: DarkColor.highlightColor,
+                            size: isSmallScreen ? 20 : 28,
+                          ),
                         ),
                       ),
-                      padding: EdgeInsets.symmetric(
-                        vertical: isSmallScreen ? 16 : 20,
-                        horizontal: isSmallScreen ? 16 : 24,
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: isSmallScreen ? 36 : 48,
-                            height: isSmallScreen ? 36 : 48,
-                            decoration: const BoxDecoration(
-                              shape: BoxShape.circle,
+                      SizedBox(width: isSmallScreen ? 12 : 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              studentName,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: isSmallScreen ? 16 : 20,
+                              ),
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            child: Center(
-                              child: Icon(
-                                Icons.person,
-                                color: const Color(0xff1940CC),
-                                size: isSmallScreen ? 20 : 28,
+                            const SizedBox(height: 2),
+                            Text(
+                              'ID: $studentId',
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.9),
+                                fontSize: isSmallScreen ? 12 : 14,
                               ),
                             ),
-                          ),
-                          SizedBox(width: isSmallScreen ? 12 : 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  studentName,
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: isSmallScreen ? 16 : 20,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  'ID: $studentId',
-                                  style: TextStyle(
-                                    color: Colors.white.withOpacity(0.9),
-                                    fontSize: isSmallScreen ? 12 : 14,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
+                    ],
+                  ),
+                ),
 
-                    // Content
-                    Flexible(
-                      child: SingleChildScrollView(
-                        physics: const BouncingScrollPhysics(),
-                        child: Padding(
-                          padding: EdgeInsets.all(isSmallScreen ? 16 : 24),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Contact Information Section
-                              if (studentEmail != null || studentPhone != null)
-                                _buildModernInfoSection(
-                                  'Contact Information',
-                                  Icons.contact_mail_outlined,
-                                  [
-                                    if (studentEmail != null)
-                                      _buildModernInfoTile(
-                                        'Email',
-                                        studentEmail.toString(),
-                                        Icons.email_outlined,
-                                        isSmallScreen,
-                                      ),
-                                    if (studentPhone != null)
-                                      _buildModernInfoTile(
-                                        'Phone',
-                                        studentPhone.toString(),
-                                        Icons.phone_outlined,
-                                        isSmallScreen,
-                                      ),
-                                  ],
-                                  isSmallScreen,
-                                ),
+                // Content
+                Flexible(
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    child: Padding(
+                      padding: EdgeInsets.all(isSmallScreen ? 16 : 24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Contact Information Section
+                          if (studentEmail != null || studentPhone != null)
+                            _buildModernInfoSection(
+                              'Contact Information',
+                              Icons.contact_mail_outlined,
+                              [
+                                if (studentEmail != null)
+                                  _buildModernInfoTile(
+                                    'Email',
+                                    studentEmail.toString(),
+                                    Icons.email_outlined,
+                                    isSmallScreen,
+                                  ),
+                                if (studentPhone != null)
+                                  _buildModernInfoTile(
+                                    'Phone',
+                                    studentPhone.toString(),
+                                    Icons.phone_outlined,
+                                    isSmallScreen,
+                                  ),
+                              ],
+                              isSmallScreen,
+                            ),
 
-                              // Booking Information Section
-                              _buildModernInfoSection(
-                                'Booking Information',
-                                Icons.book_online_outlined,
-                                [
-                                  _buildModernStatusTile(
-                                    'Seat',
-                                    seatId,
-                                    Icons.event_seat_outlined,
-                                    Colors.blue,
-                                    isSmallScreen,
-                                  ),
-                                  _buildModernStatusTile(
-                                    'Status',
-                                    status,
-                                    Icons.info_outline,
-                                    status.toLowerCase() == 'booked'
-                                        ? Colors.green
-                                        : Colors.orange,
-                                    isSmallScreen,
-                                  ),
-                                  _buildModernStatusTile(
-                                    'Payment',
-                                    paymentStatus,
-                                    Icons.payment_outlined,
-                                    paymentStatus.toLowerCase() == 'paid'
-                                        ? Colors.green
-                                        : Colors.orange,
-                                    isSmallScreen,
-                                  ),
-                                ],
+                          // Booking Information Section
+                          _buildModernInfoSection(
+                            'Booking Information',
+                            Icons.book_online_outlined,
+                            [
+                              _buildModernStatusTile(
+                                'Seat',
+                                seatId,
+                                Icons.event_seat_outlined,
+                                DarkColor.highlightColor,
                                 isSmallScreen,
                               ),
-
-                              // Shift Information Section
-                              _buildModernInfoSection(
-                                'Shift Information',
-                                Icons.schedule_outlined,
-                                [
-                                  _buildModernInfoTile(
-                                    'Shift',
-                                    shiftName,
-                                    Icons.view_timeline_outlined,
-                                    isSmallScreen,
-                                  ),
-                                  _buildModernInfoTile(
-                                    'Time',
-                                    '$shiftStartTime - $shiftEndTime',
-                                    Icons.access_time_outlined,
-                                    isSmallScreen,
-                                  ),
-                                  if (dueDate != null)
-                                    _buildModernInfoTile(
-                                      'Due Date',
-                                      dueDate.toString(),
-                                      Icons.event_outlined,
-                                      isSmallScreen,
-                                    ),
-                                ],
+                              _buildModernStatusTile(
+                                'Status',
+                                status,
+                                Icons.info_outline,
+                                status.toLowerCase() == 'active' || status.toLowerCase() == 'confirmed' || status.toLowerCase() == 'booked'
+                                    ? Colors.green
+                                    : Colors.orange,
+                                isSmallScreen,
+                              ),
+                              _buildModernStatusTile(
+                                'Payment',
+                                paymentStatus,
+                                Icons.payment_outlined,
+                                paymentStatus.toLowerCase() == 'paid'
+                                    ? Colors.green
+                                    : Colors.orange,
                                 isSmallScreen,
                               ),
                             ],
+                            isSmallScreen,
                           ),
-                        ),
-                      ),
-                    ),
 
-                    // Actions
-                    Container(
-                      padding: EdgeInsets.all(isSmallScreen ? 12 : 16),
-                      decoration: BoxDecoration(
-                        borderRadius: const BorderRadius.only(
-                          bottomLeft: Radius.circular(20),
-                          bottomRight: Radius.circular(20),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed: () => Navigator.of(context).pop(),
-                              style: OutlinedButton.styleFrom(
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                padding: EdgeInsets.symmetric(vertical: 12),
+                          // Shift Information Section
+                          _buildModernInfoSection(
+                            'Shift Information',
+                            Icons.schedule_outlined,
+                            [
+                              _buildModernInfoTile(
+                                'Shift',
+                                shiftName,
+                                Icons.view_timeline_outlined,
+                                isSmallScreen,
                               ),
-                              child: const Text('Close'),
-                            ),
+                              _buildModernInfoTile(
+                                'Time',
+                                '$shiftStartTime - $shiftEndTime',
+                                Icons.access_time_outlined,
+                                isSmallScreen,
+                              ),
+                              if (dueDate != null)
+                                _buildModernInfoTile(
+                                  'Due Date',
+                                  dueDate.toString(),
+                                  Icons.event_outlined,
+                                  isSmallScreen,
+                                ),
+                            ],
+                            isSmallScreen,
                           ),
                         ],
                       ),
                     ),
-                  ],
+                  ),
                 ),
-              ),
+
+                // Actions
+                Container(
+                  padding: EdgeInsets.all(isSmallScreen ? 12 : 16),
+                  decoration: BoxDecoration(
+                    borderRadius: const BorderRadius.only(
+                      bottomLeft: Radius.circular(20),
+                      bottomRight: Radius.circular(20),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            side: BorderSide(color: Colors.grey),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            padding: EdgeInsets.symmetric(vertical: 12),
+                          ),
+                          child: const Text('Close'),
+                        ),
+                      ),
+
+                    ],
+                  ),
+                ),
+              ],
             ),
+          ),
+        ),
       );
     } catch (e) {
       // Close loading dialog if there was an error
@@ -1164,30 +1475,31 @@ class LibrarianSeatsPage extends StatelessWidget {
       // Show error dialog
       showDialog(
         context: context,
-        builder:
-            (context) => AlertDialog(
-              title: const Text('Error'),
-              content: const Text(
-                'Failed to load student details. Please try again.',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('OK'),
-                ),
-              ],
+        builder: (context) => AlertDialog(
+          backgroundColor: DarkColor.cardColor,
+          title: Text('Error', style: TextStyle(color: Colors.white)),
+          content: Text(
+            'Failed to load student details. Please try again.',
+            style: TextStyle(color: Colors.white70),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('OK', style: TextStyle(color: DarkColor.highlightColor)),
             ),
+          ],
+        ),
       );
     }
   }
 
   // Helper method to build a modern information section
   Widget _buildModernInfoSection(
-    String title,
-    IconData icon,
-    List<Widget> children,
-    bool isSmallScreen,
-  ) {
+      String title,
+      IconData icon,
+      List<Widget> children,
+      bool isSmallScreen,
+      ) {
     return Container(
       margin: EdgeInsets.only(bottom: isSmallScreen ? 16 : 24),
       child: Column(
@@ -1198,7 +1510,7 @@ class LibrarianSeatsPage extends StatelessWidget {
               Icon(
                 icon,
                 size: isSmallScreen ? 16 : 18,
-                color: const Color(0xff1940CC),
+                color: DarkColor.highlightColor,
               ),
               SizedBox(width: isSmallScreen ? 6 : 8),
               Text(
@@ -1206,7 +1518,7 @@ class LibrarianSeatsPage extends StatelessWidget {
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: isSmallScreen ? 14 : 16,
-                  color: const Color(0xff1940CC),
+                  color: DarkColor.highlightColor,
                 ),
               ),
             ],
@@ -1216,7 +1528,7 @@ class LibrarianSeatsPage extends StatelessWidget {
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey[200]!),
+              border: Border.all(color: Colors.grey[800]!),
             ),
             child: Column(children: children),
           ),
@@ -1227,22 +1539,22 @@ class LibrarianSeatsPage extends StatelessWidget {
 
   // Helper method to build a modern information tile
   Widget _buildModernInfoTile(
-    String label,
-    String value,
-    IconData icon,
-    bool isSmallScreen,
-  ) {
+      String label,
+      String value,
+      IconData icon,
+      bool isSmallScreen,
+      ) {
     return Container(
       padding: EdgeInsets.symmetric(
         vertical: isSmallScreen ? 8 : 10,
         horizontal: 12,
       ),
       decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: Colors.grey[200]!, width: 1)),
+        border: Border(bottom: BorderSide(color: Colors.grey[800]!, width: 1)),
       ),
       child: Row(
         children: [
-          Icon(icon, size: isSmallScreen ? 16 : 18),
+          Icon(icon, size: isSmallScreen ? 16 : 18, color: Colors.grey),
           SizedBox(width: isSmallScreen ? 8 : 12),
           Expanded(
             child: Column(
@@ -1250,12 +1562,12 @@ class LibrarianSeatsPage extends StatelessWidget {
               children: [
                 Text(
                   label,
-                  style: TextStyle(fontSize: isSmallScreen ? 10 : 12),
+                  style: TextStyle(fontSize: isSmallScreen ? 10 : 12, color: Colors.grey),
                 ),
                 SizedBox(height: isSmallScreen ? 2 : 4),
                 Text(
                   value,
-                  style: TextStyle(fontSize: isSmallScreen ? 12 : 14),
+                  style: TextStyle(fontSize: isSmallScreen ? 12 : 14, color: Colors.white),
                 ),
               ],
             ),
@@ -1267,21 +1579,23 @@ class LibrarianSeatsPage extends StatelessWidget {
 
   // Helper method to build a modern status tile with color
   Widget _buildModernStatusTile(
-    String label,
-    String value,
-    IconData icon,
-    Color statusColor,
-    bool isSmallScreen,
-  ) {
+      String label,
+      String value,
+      IconData icon,
+      Color statusColor,
+      bool isSmallScreen,
+      ) {
     return Container(
       padding: EdgeInsets.symmetric(
         vertical: isSmallScreen ? 8 : 10,
         horizontal: 12,
       ),
-      decoration: BoxDecoration(border: Border(bottom: BorderSide(width: 1))),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: Colors.grey[800]!, width: 1)),
+      ),
       child: Row(
         children: [
-          Icon(icon, size: isSmallScreen ? 16 : 18),
+          Icon(icon, size: isSmallScreen ? 16 : 18, color: Colors.grey),
           SizedBox(width: isSmallScreen ? 8 : 12),
           Expanded(
             child: Column(
@@ -1289,7 +1603,7 @@ class LibrarianSeatsPage extends StatelessWidget {
               children: [
                 Text(
                   label,
-                  style: TextStyle(fontSize: isSmallScreen ? 10 : 12),
+                  style: TextStyle(fontSize: isSmallScreen ? 10 : 12, color: Colors.grey),
                 ),
                 SizedBox(height: isSmallScreen ? 2 : 4),
                 Row(
@@ -1340,24 +1654,7 @@ class LibrarianSeatsPage extends StatelessWidget {
     );
   }
 
-  // Helper for formatting dates (YYYY-MM-DD)
-  String _formatDateToString(DateTime date) {
-    return "${date.year}-${_twoDigits(date.month)}-${_twoDigits(date.day)}";
-  }
-
-  // Helper for 2-digit formatting
-  String _twoDigits(int n) {
-    return n.toString().padLeft(2, '0');
-  }
-
-  // Helper to check if two dates are the same day
-  bool _isSameDay(DateTime date1, DateTime date2) {
-    return date1.year == date2.year &&
-        date1.month == date2.month &&
-        date1.day == date2.day;
-  }
-
-  // Helper for getting weekday name
+  // Helper for formatting dates (e.g., Mon, Tue)
   String _getWeekdayName(DateTime date) {
     switch (date.weekday) {
       case 1:
@@ -1409,5 +1706,12 @@ class LibrarianSeatsPage extends StatelessWidget {
       default:
         return '';
     }
+  }
+
+  // Helper to check if two dates are the same day
+  bool _isSameDay(DateTime date1, DateTime date2) {
+    return date1.year == date2.year &&
+        date1.month == date2.month &&
+        date1.day == date2.day;
   }
 }

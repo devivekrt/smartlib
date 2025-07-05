@@ -231,12 +231,19 @@ class _LibrarianProfileSetupPageState extends State<LibrarianProfileSetupPage> {
                               labelText: 'PAN Card',
                               hintText: 'Enter your PAN card number',
                               prefixIcon: Icons.badge,
+                              // Validator for PAN ID in proper format
                               validator: (value) {
                                 if (value == null || value.isEmpty) {
                                   return 'Please enter your PAN card number';
                                 }
+                                // Simple regex for PAN validation
+                                final panRegex = RegExp(r'^[A-Z]{5}[0-9]{4}[A-Z]{1}$');
+                                if (!panRegex.hasMatch(value)) {
+                                  return 'Invalid PAN card format';
+                                }
                                 return null;
-                              },
+                              }
+
                             ),
                             SizedBox(height: 16),
 
