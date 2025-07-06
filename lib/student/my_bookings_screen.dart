@@ -6,6 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:intl/intl.dart';
 import 'package:smartlib/data/string.dart';
+import 'package:smartlib/student/library_market_place.dart';
 
 class MyBookingsScreen extends StatefulWidget {
   const MyBookingsScreen({Key? key}) : super(key: key);
@@ -462,6 +463,24 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> with SingleTickerPr
       setState(() => _isCancelling = false);
     }
   }
+  //convert 24hours time format into 12 hours format with am and pm
+  String _formatTime(String time) {
+    try {
+      final dateTime = DateFormat('HH:mm').parse(time);
+      return _formatTimeOfDay(dateTime);
+    } catch (e) {
+      return time; // Return original if parsing fails
+    }
+  }
+
+
+  // Format time of day
+  String _formatTimeOfDay(DateTime dateTime) {
+    final hour = dateTime.hour % 12 == 0 ? 12 : dateTime.hour % 12;
+    final minute = dateTime.minute.toString().padLeft(2, '0');
+    final period = dateTime.hour < 12 ? 'AM' : 'PM';
+    return '$hour:$minute $period';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -828,7 +847,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> with SingleTickerPr
 
                             // Timing details
                             Text(
-                              'Time: $startTime - $endTime',
+                              'Time: ${_formatTime(startTime)} - ${_formatTime(endTime)}',
                               style: TextStyle(fontSize: 14),
                             ),
                           ],
@@ -993,8 +1012,13 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> with SingleTickerPr
               if (_tabController.index == 0)
                 ElevatedButton.icon(
                   onPressed: () {
-                    // Navigate to library marketplace
-                    Navigator.pushNamed(context, '/library-marketplace');
+                    //show only snackbar for now
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Go to the marketplace to find libraries'),
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
                   },
                   icon: Icon(Icons.search),
                   label: Text('Find a Library'),
@@ -1101,6 +1125,24 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
       });
     }
   }
+  //convert 24hours time format into 12 hours format with am and pm
+  String _formatTime(String time) {
+    try {
+      final dateTime = DateFormat('HH:mm').parse(time);
+      return _formatTimeOfDay(dateTime);
+    } catch (e) {
+      return time; // Return original if parsing fails
+    }
+  }
+
+
+  // Format time of day
+  String _formatTimeOfDay(DateTime dateTime) {
+    final hour = dateTime.hour % 12 == 0 ? 12 : dateTime.hour % 12;
+    final minute = dateTime.minute.toString().padLeft(2, '0');
+    final period = dateTime.hour < 12 ? 'AM' : 'PM';
+    return '$hour:$minute $period';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1147,8 +1189,8 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
     final String status = _bookingData!['status']?.toString().toLowerCase() ?? '';
     final String seatNo = _bookingData!['seatNo'] ?? '';
     final String shiftName = _bookingData!['shiftName'] ?? '';
-    final String startTime = _bookingData!['shiftStartTime'] ?? '';
-    final String endTime = _bookingData!['shiftEndTime'] ?? '';
+    final String startTime =_formatTime( _bookingData!['shiftStartTime'] )?? '';
+    final String endTime = _formatTime(_bookingData!['shiftEndTime']) ?? '';
     final int? fee = _bookingData!['shiftFee'] is int
         ? _bookingData!['shiftFee']
         : int.tryParse(_bookingData!['shiftFee']?.toString() ?? '0');
@@ -1248,7 +1290,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
                       ),
                       SizedBox(height: 4),
                       Text(
-                        'Booking ID: #${bookingId.substring(0, min(8, bookingId.length))}',
+                        'Booking ID: #$bookingId',
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.white.withOpacity(0.9),

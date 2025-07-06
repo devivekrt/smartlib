@@ -4,6 +4,7 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:intl/intl.dart';
 import 'dart:async';
 import 'package:gap/gap.dart';
+import 'package:flutter/services.dart'; // Add this import
 
 import '../../data/string.dart';
 import 'librarain_booking_page.dart';
@@ -21,7 +22,6 @@ class LibrarianNavigationPage extends StatefulWidget {
 class _LibrarianNavigationPageState extends State<LibrarianNavigationPage> {
   // Navigation state
   int _currentIndex = 0;
-  final List<int> _navigationHistory = [0]; // Track navigation history for back button
   DateTime? _lastBackPressTime; // For double back to exit
 
   // Firebase instances
@@ -58,51 +58,40 @@ class _LibrarianNavigationPageState extends State<LibrarianNavigationPage> {
     if (_currentIndex != index) {
       setState(() {
         _currentIndex = index;
-        _navigationHistory.add(index); // Add to navigation history
       });
     }
   }
 
-  // Handle back button press
+  // Handle back button press - COMPLETE FIX
   Future<bool> _handleBackButton() async {
-    // If we're not on the dashboard tab, go back to the previous tab
+    // If we're not on the home tab (index 0), navigate to home tab instead of exiting
     if (_currentIndex != 0) {
-      // Remove current tab from history
-      _navigationHistory.removeLast();
-
-      // Get the previous tab
-      final previousIndex = _navigationHistory.last;
-
       setState(() {
-        _currentIndex = previousIndex;
+        _currentIndex = 0;
       });
-
-      return false; // Don't close the app
+      return false; // Prevent app exit
     }
-    // We're on the dashboard tab, check for double back press
-    else {
-      // If this is the first back press or it's been more than 2 seconds since last press
-      final now = DateTime.now();
-      if (_lastBackPressTime == null ||
-          now.difference(_lastBackPressTime!) > const Duration(seconds: 2)) {
 
-        _lastBackPressTime = now;
+    // We're on the home tab (index 0), implement double-back to exit
+    final now = DateTime.now();
+    if (_lastBackPressTime == null ||
+        now.difference(_lastBackPressTime!) > const Duration(seconds: 2)) {
+      _lastBackPressTime = now;
 
-        // Show warning toast/snackbar
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Press back again to exit'),
-            duration: Duration(seconds: 2),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+      // Show warning toast/snackbar
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Press back again to exit'),
+          duration: Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
 
-        return false; // Don't close the app yet
-      }
-
-      // This is the second back press within 2 seconds, exit the app
-      return true; // Allow the app to close
+      return false; // Don't exit the app yet
     }
+
+    // This is the second back press within 2 seconds
+    return true; // Allow the app to exit
   }
 
   // Fetch pending payments for notifications
@@ -179,8 +168,40 @@ class _LibrarianNavigationPageState extends State<LibrarianNavigationPage> {
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: _handleBackButton,
+    return PopScope( // Using PopScope instead of WillPopScope for Flutter 3.12+
+      canPop: false, // Disable automatic popping
+      onPopInvoked: (didPop) async {
+        // Handle the back button press event
+        if (didPop) return;
+
+        // If not on home tab, go to home tab
+        if (_currentIndex != 0) {
+          setState(() {
+            _currentIndex = 0;
+          });
+          return;
+        }
+
+        // We're on the home tab, check if we should exit
+        final now = DateTime.now();
+        if (_lastBackPressTime == null ||
+            now.difference(_lastBackPressTime!) > const Duration(seconds: 2)) {
+          _lastBackPressTime = now;
+
+          // Show warning toast/snackbar
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Press back again to exit'),
+              duration: Duration(seconds: 2),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          return;
+        }
+
+        // This is the second press within 2 seconds, exit the app
+        SystemNavigator.pop(); // Properly exit the app
+      },
       child: Scaffold(
         appBar: AppBar(
           title: Text(

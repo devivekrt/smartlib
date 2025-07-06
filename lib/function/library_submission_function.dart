@@ -33,13 +33,11 @@ class LibrarySubmissionService {
         // Image size not more then 100kb
         final imageSize = await imageFile.length();
         if (imageSize <= 100 * 1024) {
-          print('Image size is within limit: ${imageSize / 1024} KB');
         } else {
           // Compress the image if it's larger than 100KB
           final compressedImage = await _compressImage(imageFile);
           if (compressedImage != null) {
             imageFile = compressedImage;
-            print('Compressed image to under 100KB');
           } else {
             throw Exception('Failed to compress image to under 100KB');
           }
@@ -85,13 +83,12 @@ class LibrarySubmissionService {
       final libraryData = libraryModel.toMap();
 
       // Explicitly log the openingHours data for debugging
-      print("Opening Hours before submission: ${libraryModel.openingHours}");
-      print("Complete library data for submission: $libraryData");
 
       // Store library data in Firestore
       await _firestore.collection('libraries')
           .doc(libraryId)
           .set(libraryData);
+
 
       // Process shifts for seat generation
       final Map<String, dynamic> shiftsMap = libraryModel.shifts;
@@ -111,7 +108,6 @@ class LibrarySubmissionService {
 
       return libraryId;
     } catch (e) {
-      print("Error submitting library: $e");
       rethrow;
     }
   }
@@ -143,7 +139,6 @@ class LibrarySubmissionService {
 
           // If under 100KB, we're good
           if (fileSize <= 100 * 1024) {
-            print('Compressed image to $quality% quality, size: ${fileSize / 1024} KB');
             return result;
           }
 
@@ -213,9 +208,7 @@ class LibrarySubmissionService {
           .doc(libraryId)
           .update({'seats': seatsData});
 
-      print("Successfully generated and saved $totalSeats seats for library $libraryId");
     } catch (e) {
-      print("Error generating seats: $e");
       rethrow;
     }
   }
@@ -252,9 +245,7 @@ class LibrarySubmissionService {
       // Update the library document with new data
       await libraryRef.update(updatedLibraryModel.toMap());
 
-      print("Library details updated successfully for $libraryId");
     } catch (e) {
-      print("Error updating library details: $e");
       rethrow;
     }
   }

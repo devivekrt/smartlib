@@ -53,7 +53,6 @@ class _LibrarianProfilePageState extends State<LibrarianProfilePage> {
         _isLoading = false;
       });
     } catch (e) {
-      print('Error loading profile data: $e');
       setState(() {
         _isLoading = false;
       });
@@ -101,7 +100,6 @@ class _LibrarianProfilePageState extends State<LibrarianProfilePage> {
         });
       }
     } catch (e) {
-      print('Error loading librarian data: $e');
       // Fallback to SmartLib data
       setState(() {
         _librarianData = {
@@ -161,7 +159,6 @@ class _LibrarianProfilePageState extends State<LibrarianProfilePage> {
         _libraryModels = libraries;
       });
     } catch (e) {
-      print('Error loading libraries data: $e');
 
       // Try to get library data from SmartLib if available
       if (SmartLib.allLibraryList.isNotEmpty) {

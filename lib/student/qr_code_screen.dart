@@ -72,6 +72,7 @@ class _QRScannerScreenState extends State<QRScannerScreen>
   String _shiftStartTime = '';
   String _shiftEndTime = '';
   String _dueDate = '';
+  String _currentStatus = '';
   double _fee = 0.0;
   String _paymentStatus = '';
   int _shiftCount = 0;
@@ -105,25 +106,13 @@ class _QRScannerScreenState extends State<QRScannerScreen>
         _isLoading = false;
       });
 
-      print('[2025-06-29 10:10:32] devivekrt: QRScannerScreen initialized successfully');
     } catch (e) {
-      print('[2025-06-29 10:10:32] devivekrt: Error initializing QRScannerScreen: $e');
       setState(() {
         _isLoading = false;
       });
     }
   }
 
-  // Show location error message
-  void _showLocationError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: Colors.red,
-          duration: Duration(seconds: 5),
-        )
-    );
-  }
 
   // Fetch user's complete current status from Firebase Realtime Database
   Future<void> _fetchCurrentStatus() async {
@@ -139,6 +128,7 @@ class _QRScannerScreenState extends State<QRScannerScreen>
         setState(() {
           // Base check-in status
           _isCheckedIn = data['isCheckedIn'] == true;
+          _currentStatus = data['currentStatus']?.toString() ?? '';
 
           // Library and seat info
           _currentLibraryId = data['currentLibraryId']?.toString() ?? '';
@@ -159,6 +149,7 @@ class _QRScannerScreenState extends State<QRScannerScreen>
               : 0;
 
           _checkInTime = data['checkInTime']?.toString() ?? '';
+
         });
 
         // If user is checked in or has a current library, fetch the library location
@@ -166,12 +157,9 @@ class _QRScannerScreenState extends State<QRScannerScreen>
           await _fetchLibraryLocation(_currentLibraryId);
         }
 
-        print('[2025-06-29 10:10:32] devivekrt: Fetched current status successfully');
       } else {
-        print('[2025-06-29 10:10:32] devivekrt: No current status data found');
       }
     } catch (e) {
-      print('[2025-06-29 10:10:32] devivekrt: Error fetching current status: $e');
       setState(() {
         _isCheckedIn = false;
       });
@@ -182,7 +170,6 @@ class _QRScannerScreenState extends State<QRScannerScreen>
   Future<void> _fetchLibraryLocation(String libraryId) async {
     try {
       if (libraryId.isEmpty) {
-        print('[2025-06-29 10:10:32] devivekrt: Library ID is empty');
         return;
       }
 
@@ -202,16 +189,13 @@ class _QRScannerScreenState extends State<QRScannerScreen>
           _libraryLongitude = double.tryParse(lngStr);
           _libraryName = data['libraryName']?.toString() ?? 'Library';
 
-          print('[2025-06-29 10:10:32] devivekrt: Fetched library location: $_libraryLatitude, $_libraryLongitude');
 
           // Check if student is within range of the library
           await _checkLocationDistance();
         }
       } else {
-        print('[2025-06-29 10:10:32] devivekrt: Library document not found');
       }
     } catch (e) {
-      print('[2025-06-29 10:10:32] devivekrt: Error fetching library location: $e');
     }
   }
 
@@ -222,7 +206,6 @@ class _QRScannerScreenState extends State<QRScannerScreen>
     });
 
     if (_libraryLatitude == null || _libraryLongitude == null) {
-      print('[2025-06-29 10:10:32] devivekrt: Library coordinates not available');
       setState(() {
         _isWithinRange = false;
         _isLocationChecking = false;
@@ -243,7 +226,6 @@ class _QRScannerScreenState extends State<QRScannerScreen>
       _isLocationChecking = false;
     });
 
-    print('[2025-06-29 10:10:32] devivekrt: Location check result: within range = $_isWithinRange');
   }
 
   @override
@@ -253,8 +235,6 @@ class _QRScannerScreenState extends State<QRScannerScreen>
     super.dispose();
   }
 
-  // Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): 2025-06-29 10:31:19
-// Current User's Login: devivekrt
 
 // Handle QR scan result
   void _onDetect(BarcodeCapture capture) async {
@@ -294,7 +274,6 @@ class _QRScannerScreenState extends State<QRScannerScreen>
           throw Exception('Invalid QR code format. Please scan a valid SmartLib QR code.');
         }
 
-        print("[2025-06-29 10:31:19] devivekrt: Scanned library ID: $libraryId");
 
         // Fetch library location first
         await _fetchLibraryLocation(libraryId);
@@ -333,7 +312,6 @@ class _QRScannerScreenState extends State<QRScannerScreen>
         // Smart format QR code - auto-detects check-in/check-out
         final part = code.split('_')[1];
         final libraryId = 'LIB_$part';
-        print("[2025-06-29 10:31:19] devivekrt: Processing libraryId: $libraryId, Current library ID: $_currentLibraryId");
 
         // Determine action based on current state
         final action = _isCheckedIn ? "CHECKOUT" : "CHECKIN";
@@ -544,13 +522,10 @@ class _QRScannerScreenState extends State<QRScannerScreen>
                 // Compare using DateTime objects for more reliable comparison
                 if (currentDateTime.isBefore(earlyCheckinDateTime)) {
                   canCheckIn = false;
-                  print("[2025-06-29 10:31:19] devivekrt: Too early to check in. Current time: $currentDateTime, Earliest check-in time: $earlyCheckinDateTime");
                 } else {
-                  print("[2025-06-29 10:31:19] devivekrt: Check-in allowed. Current time: $currentDateTime, Shift start time: $shiftStartDateTime");
                 }
               }
             } catch (e) {
-              print("[2025-06-29 10:31:19] devivekrt: Error checking shift start time from current status: $e");
               // Default to allowing check-in if there's an error
               canCheckIn = true;
             }
@@ -654,9 +629,7 @@ class _QRScannerScreenState extends State<QRScannerScreen>
               final currentDateTime = DateTime.now();
               final duration = currentDateTime.difference(checkInDate);
               studyHours = duration.inHours;
-              print("[2025-06-29 10:31:19] devivekrt: Study hours: $studyHours");
             } catch (e) {
-              print("[2025-06-29 10:31:19] devivekrt: Error calculating duration: $e");
             }
           }
         }
@@ -696,7 +669,6 @@ class _QRScannerScreenState extends State<QRScannerScreen>
 
       return 'Unrecognized action';
     } catch (e) {
-      print('[2025-06-29 10:31:19] devivekrt: Error processing QR scan: $e');
       return 'Error processing scan: ${e.toString()}';
     }
   }
@@ -773,9 +745,7 @@ class _QRScannerScreenState extends State<QRScannerScreen>
           .doc(recordId)
           .set(attendanceData, SetOptions(merge: true));
 
-      print('[2025-06-29 10:10:32] devivekrt: Attendance history updated for $date');
     } catch (e) {
-      print("[2025-06-29 10:10:32] devivekrt: Error updating attendance history: $e");
       throw e;
     }
   }
@@ -809,7 +779,6 @@ class _QRScannerScreenState extends State<QRScannerScreen>
 
       // Check if we already updated the streak today
       if (safeStreakData['lastUpdatedDate'] == todayString) {
-        print("[2025-06-29 10:10:32] devivekrt: Streak already updated today. Skipping.");
         return;
       }
 
@@ -833,7 +802,6 @@ class _QRScannerScreenState extends State<QRScannerScreen>
       if (snapshot.docs.isNotEmpty) {
         // If checked in yesterday, increment streak
         newStreak = currentStreak + 1;
-        print("[2025-06-29 10:10:32] devivekrt: Checked in yesterday. New streak: $newStreak");
       } else {
         // If not checked in yesterday, check if this is the first check-in after multiple missed days
 
@@ -873,16 +841,13 @@ class _QRScannerScreenState extends State<QRScannerScreen>
             // Just missed yesterday
             newStreak =
                 currentStreak; // Keep the streak (or subtract 1 if you prefer)
-            print("[2025-06-29 10:10:32] devivekrt: Missed only yesterday. Maintaining streak: $newStreak");
           } else {
             // Missed more than one day, reset streak
             newStreak = 1;
-            print("[2025-06-29 10:10:32] devivekrt: Missed multiple days. Resetting streak to 1");
           }
         } else {
           // No previous check-ins found or too old, start new streak
           newStreak = 1;
-          print("[2025-06-29 10:10:32] devivekrt: No recent check-ins found. New streak: 1");
         }
       }
 
@@ -899,14 +864,12 @@ class _QRScannerScreenState extends State<QRScannerScreen>
         'updatedAt': ServerValue.timestamp,
       });
 
-      print("[2025-06-29 10:10:32] devivekrt: Streak updated successfully to $newStreak");
 
       // If streak reaches certain milestones, consider creating an achievement notification
       if (newStreak == 7 || newStreak == 30 || newStreak == 100) {
         _createStreakAchievementNotification(newStreak);
       }
     } catch (e) {
-      print("[2025-06-29 10:10:32] devivekrt: Error updating streak: $e");
     }
   }
 
@@ -960,9 +923,7 @@ class _QRScannerScreenState extends State<QRScannerScreen>
         'createdAt': ServerValue.timestamp,
       });
 
-      print("[2025-06-29 10:10:32] devivekrt: Created streak achievement notification for $streak days");
     } catch (e) {
-      print("[2025-06-29 10:10:32] devivekrt: Error creating streak achievement notification: $e");
     }
   }
 
@@ -1162,8 +1123,7 @@ class _QRScannerScreenState extends State<QRScannerScreen>
                     height: width * 0.8,
                     decoration: BoxDecoration(
                       border: Border.all(
-                        color:
-                        _showSuccess
+                        color: _showSuccess
                             ? Colors.green
                             : _showError
                             ? Colors.red
@@ -1178,11 +1138,80 @@ class _QRScannerScreenState extends State<QRScannerScreen>
                         children: [
                           // Conditional rendering based on state
                           if (!_showSuccess && !_showError)
+                          // Check if user is checked in or within range - show scanner
                             if (_isCheckedIn || _isWithinRange)
                               MobileScanner(
                                 controller: _scannerController,
                                 onDetect: _onDetect,
                               )
+                            // Not checked in and not in range - show appropriate UI based on booking status
+                            else if (_currentStatus != 'joined')
+                            // No active booking - show "Book a Seat" UI
+                              Container(
+                                color: Colors.black87,
+                                child: Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.event_seat_rounded,
+                                        color: Colors.amber,
+                                        size: 60,
+                                      ),
+                                      SizedBox(height: 20),
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                                        child: Text(
+                                          "You don't have an active booking",
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                      SizedBox(height: 8),
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                                        child: Text(
+                                          "Book a seat at a library before checking in",
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            color: Colors.white70,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                      ),
+                                      SizedBox(height: 24),
+                                      ElevatedButton.icon(
+                                        onPressed: () {
+                                          // Navigate to the library marketplace or booking screen
+                                          Navigator.of(context).pop({'action': 'book_seat'});
+                                        },
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.amber,
+                                          foregroundColor: Colors.black,
+                                          padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(30),
+                                          ),
+                                        ),
+                                        icon: Icon(Icons.book_online),
+                                        label: Text(
+                                          "Book a Seat",
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              )
+
+                            // Has booking but not within range - show location message
                             else
                               Container(
                                 color: Colors.black87,

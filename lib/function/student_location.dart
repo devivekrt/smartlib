@@ -80,6 +80,11 @@ class StudentLocationService {
 
       }
     } catch (e) {
+      // Handle any errors that occur while loading preferences
+      _latitude = null;
+      _longitude = null;
+      _address = null;
+      _lastUpdated = null;
     }
   }
 
@@ -102,6 +107,11 @@ class StudentLocationService {
       }
 
     } catch (e) {
+      // Handle any errors that occur while saving preferences
+      _latitude = null;
+      _longitude = null;
+      _address = null;
+      _lastUpdated = null;
     }
   }
 
@@ -191,6 +201,8 @@ class StudentLocationService {
         _address = addressParts.join(", ");
       }
     } catch (e) {
+      // Handle any errors that occur while getting address
+      _address = null;
     }
   }
 
@@ -315,6 +327,11 @@ class StudentLocationService {
       _lastUpdated = null;
 
     } catch (e) {
+      // Handle any errors that occur while clearing preferences
+      _latitude = null;
+      _longitude = null;
+      _address = null;
+      _lastUpdated = null;
     }
   }
 

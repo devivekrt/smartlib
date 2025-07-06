@@ -34,7 +34,6 @@ class NotificationService {
   /// Initialize the notification service
   Future<void> initialize() async {
     try {
-      print('Initializing notification service...');
 
       // Request permissions
       await _requestPermissions();
@@ -42,9 +41,7 @@ class NotificationService {
       // Setup Firebase message handlers
       _setupMessageHandlers();
 
-      print('Notification service initialized successfully');
     } catch (e) {
-      print('Error initializing notification service: $e');
     }
   }
 
@@ -57,11 +54,7 @@ class NotificationService {
         sound: true,
       );
 
-      print(
-        'User notification permission status: ${settings.authorizationStatus}',
-      );
     } catch (e) {
-      print('Error requesting notification permissions: $e');
     }
   }
 
@@ -81,16 +74,13 @@ class NotificationService {
         }
       });
 
-      print('Firebase message handlers setup complete');
     } catch (e) {
-      print('Error setting up message handlers: $e');
     }
   }
 
   /// Handle foreground messages (app is open)
   Future<void> _handleForegroundMessage(RemoteMessage message) async {
     try {
-      print('Received foreground message: ${message.messageId}');
 
       // Store notification in database
       await _saveNotificationToDatabase(message);
@@ -99,37 +89,28 @@ class NotificationService {
       // FCM will handle the display of foreground notifications
 
     } catch (e) {
-      print('Error handling foreground message: $e');
     }
   }
 
   /// Handle background message (app is in background)
   Future<void> _handleMessageOpenedApp(RemoteMessage message) async {
     try {
-      print(
-        'App opened from background via notification: ${message.messageId}',
-      );
 
       // Navigate to appropriate screen
       _navigateBasedOnNotification(message.data);
     } catch (e) {
-      print('Error handling background message: $e');
     }
   }
 
   /// Handle initial message (app was terminated)
   Future<void> _handleInitialMessage(RemoteMessage message) async {
     try {
-      print(
-        'App opened from terminated state via notification: ${message.messageId}',
-      );
 
       // Navigate to appropriate screen after a short delay to ensure app is ready
       Future.delayed(const Duration(milliseconds: 500), () {
         _navigateBasedOnNotification(message.data);
       });
     } catch (e) {
-      print('Error handling initial message: $e');
     }
   }
 
@@ -146,7 +127,6 @@ class NotificationService {
       }
 
       if (userId == null || userId.isEmpty) {
-        print('No user ID available for notification');
         return;
       }
 
@@ -179,9 +159,7 @@ class NotificationService {
       // Update unread count in RTDB for badge
       await _incrementUnreadCount(userId);
 
-      print('Notification saved for user $userId');
     } catch (e) {
-      print('Error saving notification to database: $e');
     }
   }
 
@@ -190,7 +168,6 @@ class NotificationService {
     // Get navigator state with null safety
     final navigatorState = navigatorKey.currentState;
     if (navigatorState == null) {
-      print('No valid navigator state for navigation');
       return;
     }
 
@@ -233,14 +210,12 @@ class NotificationService {
           );
       }
     } catch (e) {
-      print('Error navigating based on notification: $e');
     }
   }
 
   /// Save FCM token when user logs in
   Future<void> saveUserToken(String userId) async {
     if (userId.isEmpty) {
-      print('Cannot save FCM token: userId is empty');
       return;
     }
 
@@ -248,7 +223,6 @@ class NotificationService {
       // Get current token
       final token = await _messaging.getToken();
       if (token == null || token.isEmpty) {
-        print('FCM token is null or empty');
         return;
       }
 
@@ -260,15 +234,12 @@ class NotificationService {
         'appVersion': '1.0.0', // Update with your app version
       });
 
-      print('FCM token saved for user $userId: $token');
 
       // Listen for token refreshes
       _messaging.onTokenRefresh.listen((newToken) {
-        print('FCM token refreshed: $newToken');
         saveUserToken(userId);
       });
     } catch (e) {
-      print('Error saving FCM token: $e');
     }
   }
 
@@ -278,7 +249,6 @@ class NotificationService {
       String userId,
       ) async {
     if (notificationId.isEmpty || userId.isEmpty) {
-      print('Cannot mark notification as read: invalid parameters');
       return;
     }
 
@@ -291,9 +261,7 @@ class NotificationService {
       // Decrement unread count
       await _decrementUnreadCount(userId);
 
-      print('Notification $notificationId marked as read for user $userId');
     } catch (e) {
-      print('Error marking notification as read: $e');
     }
   }
 
@@ -326,12 +294,10 @@ class NotificationService {
               try {
                 currentCount = int.parse(unreadValue.toString());
               } catch (e) {
-                print('Error parsing unreadNotifications: $e');
               }
             }
           }
         } catch (e) {
-          print('Error extracting unreadNotifications: $e');
         }
       }
 
@@ -341,9 +307,7 @@ class NotificationService {
       // Perform the update
       await ref.update(updates);
 
-      print('Unread count incremented for user $userId');
     } catch (e) {
-      print('Error updating unread count: $e');
     }
   }
 
@@ -376,12 +340,10 @@ class NotificationService {
               try {
                 currentCount = int.parse(unreadValue.toString());
               } catch (e) {
-                print('Error parsing unreadNotifications: $e');
               }
             }
           }
         } catch (e) {
-          print('Error extracting unreadNotifications: $e');
         }
       }
 
@@ -396,16 +358,13 @@ class NotificationService {
       // Perform the update
       await ref.update(updates);
 
-      print('Unread count decremented for user $userId');
     } catch (e) {
-      print('Error updating unread count: $e');
     }
   }
 
   /// Mark all notifications as read for a user
   Future<void> markAllNotificationsAsRead(String userId) async {
     if (userId.isEmpty) {
-      print('Cannot mark all notifications as read: userId is empty');
       return;
     }
 
@@ -419,7 +378,6 @@ class NotificationService {
           .get();
 
       if (querySnapshot.docs.isEmpty) {
-        print('No unread notifications found for user $userId');
         return;
       }
 
@@ -439,11 +397,7 @@ class NotificationService {
         'unreadNotifications': 0,
       });
 
-      print(
-        'Marked all ${querySnapshot.docs.length} notifications as read for user $userId',
-      );
     } catch (e) {
-      print('Error marking all notifications as read: $e');
     }
   }
 
@@ -463,9 +417,7 @@ class NotificationService {
       // Delete FCM token from RTDB
       await _database.ref('users/students/$userId/fcm/token').remove();
 
-      print('Notification service cleaned up for user logout');
     } catch (e) {
-      print('Error cleaning up notification service: $e');
     }
   }
 
@@ -491,7 +443,6 @@ class NotificationService {
 
       return int.tryParse(snapshot.snapshot.value.toString()) ?? 0;
     } catch (e) {
-      print('Error getting unread count: $e');
       return 0;
     }
   }

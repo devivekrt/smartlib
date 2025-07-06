@@ -187,6 +187,7 @@ class ListenData {
         final libraryData = doc.data();
         final libraryId = doc.id;
         libraryData['id'] = libraryId;
+
         allLibraries.add(libraryData);
       }
 
@@ -295,7 +296,6 @@ class ListenData {
           .doc(date)
           .collection('records')
           .where('libraryId', isEqualTo: SmartLib.libraryId)
-          .orderBy('timestamp', descending: true)
           .get();
 
       final attendanceRecords = <Map<String, dynamic>>[];
@@ -682,6 +682,7 @@ class ListenData {
 
         // Add ID to the data
         libraryData['id'] = libraryId;
+        SmartLib.libraryId = libraryId;
 
 
         // Cache the data
@@ -690,6 +691,7 @@ class ListenData {
         // Update SmartLib
         _applyLibraryData(libraryData);
       } catch (e) {
+        // Handle any errors that occur during processing
       }
     }, onError: (error) {
     });
@@ -859,7 +861,7 @@ class ListenData {
         }
 
         // Cache the data
-        _cacheData('library_attendance_${today}', records);
+        _cacheData('library_attendance_$today', records);
 
       } catch (e) {
       }

@@ -62,10 +62,10 @@ class _LibraryDetailsUploadState extends State<LibraryDetailsUpload> {
   ];
 
   // Opening hours controllers with default values
-  final _weekdaysOpenController = TextEditingController(text: '09:00');
-  final _weekdaysCloseController = TextEditingController(text: '18:00');
-  final _weekendOpenController = TextEditingController(text: '10:00');
-  final _weekendCloseController = TextEditingController(text: '16:00');
+  final _weekdaysOpenController = TextEditingController();
+  final _weekdaysCloseController = TextEditingController();
+  final _weekendOpenController = TextEditingController();
+  final _weekendCloseController = TextEditingController();
 
   // Predefined utilities
   final List<LibraryUtility> _utilities = [
@@ -1040,6 +1040,9 @@ class _LibraryDetailsUploadState extends State<LibraryDetailsUpload> {
         );
       },
     );
+    setState(() {
+      
+    });
 
     if (picked != null) {
       // Format the time as 'HH:MM'

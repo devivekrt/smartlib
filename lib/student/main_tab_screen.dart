@@ -19,9 +19,6 @@ class _MainTabScreenState extends State<MainTabScreen> {
   int _selectedIndex = 0;
   DateTime? _lastBackPressTime; // Track last back press time for double back detection
 
-  // Navigation history to handle back button presses
-  final List<int> _navigationHistory = [0]; // Start with home tab in history
-
   // Page widgets: 0=Home, 1=Marketplace, 2=Activity, 3=Profile
   late final List<Widget> _pages = [
     StudentHomePage(
@@ -37,7 +34,6 @@ class _MainTabScreenState extends State<MainTabScreen> {
     if (_selectedIndex != index) {
       setState(() {
         _selectedIndex = index;
-        _navigationHistory.add(index); // Add to navigation history
       });
     }
   }
@@ -51,52 +47,74 @@ class _MainTabScreenState extends State<MainTabScreen> {
     );
   }
 
-  // Handle back button press
+  // Handle back button press - FIXED VERSION
   Future<bool> _handleBackButton() async {
-    // If we're not on the home tab, go back to the previous tab
+    // If we're not on the home tab, go to home tab first
     if (_selectedIndex != 0) {
-      // Remove current tab from history
-      _navigationHistory.removeLast();
-
-      // Get the previous tab
-      final previousIndex = _navigationHistory.last;
-
       setState(() {
-        _selectedIndex = previousIndex;
+        _selectedIndex = 0;
       });
-
-      return false; // Don't close the app
+      return false; // Don't exit the app
     }
-    // We're on the home tab, check for double back press
-    else {
-      // If this is the first back press or it's been more than 2 seconds since last press
-      final now = DateTime.now();
-      if (_lastBackPressTime == null ||
-          now.difference(_lastBackPressTime!) > const Duration(seconds: 2)) {
 
-        _lastBackPressTime = now;
+    // We're on the home tab, implement double-back to exit
+    final now = DateTime.now();
+    if (_lastBackPressTime == null ||
+        now.difference(_lastBackPressTime!) > const Duration(seconds: 2)) {
+      _lastBackPressTime = now;
 
-        // Show warning toast/snackbar
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Press back again to exit'),
-            duration: Duration(seconds: 2),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+      // Show warning toast/snackbar
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Press back again to exit'),
+          duration: Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
 
-        return false; // Don't close the app yet
-      }
-
-      // This is the second back press within 2 seconds, exit the app
-      return true; // Allow the app to close
+      return false; // Don't exit the app yet
     }
+
+    // This is the second back press within 2 seconds
+    return true; // Exit the app
   }
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: _handleBackButton,
+    return PopScope( // Using PopScope for newer Flutter versions
+      canPop: false,  // Disable automatic popping
+      onPopInvoked: (didPop) async {
+        // If already popped, return
+        if (didPop) return;
+
+        // If not on home tab, go to home tab
+        if (_selectedIndex != 0) {
+          setState(() {
+            _selectedIndex = 0;
+          });
+          return;
+        }
+
+        // We're on the home tab, check for double press
+        final now = DateTime.now();
+        if (_lastBackPressTime == null ||
+            now.difference(_lastBackPressTime!) > const Duration(seconds: 2)) {
+          _lastBackPressTime = now;
+
+          // Show warning toast
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Press back again to exit'),
+              duration: Duration(seconds: 2),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          return;
+        }
+
+        // Second press within 2 seconds, exit the app
+        SystemNavigator.pop();
+      },
       child: Scaffold(
         body: _pages[_selectedIndex],
         floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,

@@ -46,6 +46,7 @@ class _LibrarianSeatsPageState extends State<LibrarianSeatsPage> {
     });
 
     try {
+      ListenData().getUserData();
       // Load library data
       await _loadLibraryData();
 

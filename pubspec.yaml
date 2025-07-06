@@ -58,6 +58,7 @@ dependencies:
     # File Handling & Storage
   path_provider: ^2.1.1       # Access to device file system
   intl: ^0.18.1              # Date formatting, required for YYYY-MM-DD HH:MM:SS format
+  url_launcher: ^6.3.1
 
 
 

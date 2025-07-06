@@ -5,7 +5,7 @@ import 'package:smartlib/function/listen_data.dart';
 import 'package:smartlib/theme/theme.dart';
 
 class LibrarianSubscribersScreen extends StatefulWidget {
-  const LibrarianSubscribersScreen({Key? key}) : super(key: key);
+  const LibrarianSubscribersScreen({super.key});
 
   @override
   _LibrarianSubscribersScreenState createState() => _LibrarianSubscribersScreenState();
@@ -51,7 +51,6 @@ class _LibrarianSubscribersScreenState extends State<LibrarianSubscribersScreen>
         _isLoading = false;
       });
     } catch (e) {
-      print('Error fetching subscribers: $e');
       setState(() {
         _isLoading = false;
       });
@@ -110,7 +109,6 @@ class _LibrarianSubscribersScreenState extends State<LibrarianSubscribersScreen>
       return difference.inDays;
 
     } catch (e) {
-      print('Error parsing due date: $e');
       return 0; // Return 0 if there's an error
     }
   }
@@ -385,7 +383,6 @@ class _LibrarianSubscribersScreenState extends State<LibrarianSubscribersScreen>
 
   Widget _buildSubscriberCard(Map<String, dynamic> subscriber) {
     final remainingDays = _getRemainingDays(subscriber['dueDate']);
-    print('Remaining days: $remainingDays');
     final statusColor = _getStatusColor(subscriber['subscriptionStatus']);
 
     return Card(
@@ -695,7 +692,7 @@ class _LibrarianSubscribersScreenState extends State<LibrarianSubscribersScreen>
                       ),
                     ),
                   ),
-                  SizedBox(width: 12),
+                  /*SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: () {
@@ -709,7 +706,7 @@ class _LibrarianSubscribersScreenState extends State<LibrarianSubscribersScreen>
                         padding: EdgeInsets.symmetric(vertical: 12),
                       ),
                     ),
-                  ),
+                  ),*/
                 ],
               ),
             ],
@@ -903,7 +900,7 @@ class _LibrarianSubscribersScreenState extends State<LibrarianSubscribersScreen>
 class ShimmerLoading extends StatefulWidget {
   final Widget child;
 
-  const ShimmerLoading({Key? key, required this.child}) : super(key: key);
+  const ShimmerLoading({super.key, required this.child});
 
   @override
   _ShimmerLoadingState createState() => _ShimmerLoadingState();

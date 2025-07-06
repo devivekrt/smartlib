@@ -184,8 +184,8 @@ class _StudentHomePageState extends State<StudentHomePage> {
 
           // Get payment and timing information
           _dueDate = statusData['dueDate']?.toString() ?? '';
-          _fee = (statusData['shiftFee'] != null)
-              ? double.tryParse(statusData['shiftFee'].toString()) ?? 0.0
+          _fee = (statusData['totalFee'] != null)
+              ? double.tryParse(statusData['totalFee'].toString()) ?? 0.0
               : 0.0;
           _paymentStatus = statusData['paymentStatus']?.toString() ?? '';
 
@@ -542,6 +542,16 @@ class _StudentHomePageState extends State<StudentHomePage> {
     ];
     return colors[seed % colors.length];
   }
+  //convert 24hours time format into 12 hours format with am and pm
+  String _formatTime(String time) {
+    try {
+      final dateTime = DateFormat('HH:mm').parse(time);
+      return _formatTimeOfDay(dateTime);
+    } catch (e) {
+      return time; // Return original if parsing fails
+    }
+  }
+
 
   // Format time of day
   String _formatTimeOfDay(DateTime dateTime) {
@@ -766,10 +776,13 @@ class _StudentHomePageState extends State<StudentHomePage> {
     );
   }
 
+
+
   // Advanced Student Detail Current Status Card
   Widget _buildCurrentStatusCard(double width) {
     // Has data flag - check if we have meaningful data to display
     final hasData = _currentLibraryId.isNotEmpty || _currentSeatId.isNotEmpty || _shiftId.isNotEmpty;
+    final remainingDays = _getRemainingDays(_dueDate);
 
     return Card(
       shape: RoundedRectangleBorder(
@@ -880,20 +893,22 @@ class _StudentHomePageState extends State<StudentHomePage> {
                           color: Colors.white.withOpacity(0.2),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
+                        child:  Row(
                           children: [
                             Icon(
-                              Icons.update,
-                              color: Colors.white,
-                              size: 14,
+                                Icons.timelapse,
+                                size: 14,
+                                color: remainingDays <= 0 ? Colors.red : (remainingDays <= 5 ? Colors.orange : Colors.green)
                             ),
                             SizedBox(width: 4),
                             Text(
-                              "Auto-updated",
+                              remainingDays > 0
+                                  ? '$remainingDays days remaining'
+                                  : 'Expired',
                               style: TextStyle(
-                                color: Colors.white,
                                 fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: remainingDays <= 0 ? Colors.red : (remainingDays <= 5 ? Colors.orange : Colors.green),
                               ),
                             ),
                           ],
@@ -987,7 +1002,7 @@ class _StudentHomePageState extends State<StudentHomePage> {
                             if (_shiftStartTime.isNotEmpty && _shiftEndTime.isNotEmpty)
                               _buildEnhancedInfoRow(
                                 "Time:",
-                                "$_shiftStartTime - $_shiftEndTime",
+                                "${_formatTime(_shiftStartTime)} - ${_formatTime(_shiftEndTime)}",
                                 Icons.access_time,
                               ),
 
@@ -1019,6 +1034,8 @@ class _StudentHomePageState extends State<StudentHomePage> {
                                   ),
                                 ],
                               ),
+
+
                           ],
                         ),
                       ),
@@ -1062,6 +1079,20 @@ class _StudentHomePageState extends State<StudentHomePage> {
         ),
       ),
     );
+  }
+
+  // Calculate remaining days for subscription
+  int _getRemainingDays(String? dueDate) {
+    if (dueDate == null || dueDate.isEmpty) return 0;
+    try {
+      final dueDateTime = DateTime.parse(dueDate);
+      final now = DateTime.now();
+      final difference = dueDateTime.difference(now);
+      return difference.inDays;
+
+    } catch (e) {
+      return 0; // Return 0 if there's an error
+    }
   }
 
 // Enhanced info row with icon
@@ -1136,36 +1167,6 @@ class _StudentHomePageState extends State<StudentHomePage> {
               );
             }
 
-            // Error state
-            if (snapshot.hasError) {
-              return Container(
-                height: 180, // Only fixed height for error state
-                decoration: BoxDecoration(
-                  color: cardColor,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black12,
-                      blurRadius: 10,
-                      offset: Offset(0, 5),
-                    ),
-                  ],
-                ),
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.error_outline, color: Colors.redAccent, size: 36),
-                      SizedBox(height: 8),
-                      Text(
-                        "Error loading statistics",
-                        style: TextStyle(color: textColor.withOpacity(0.7)),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }
 
             // Get stats from snapshot
             final stats = snapshot.data ?? {
@@ -1403,9 +1404,9 @@ class _StudentHomePageState extends State<StudentHomePage> {
           final data = doc.data();
 
           // Get duration if available directly
-          if (data['duration'] != null) {
+          if (data['studyHours'] != null) {
             try {
-              totalMinutes += int.parse(data['duration'].toString());
+              totalMinutes += int.parse(data['studyHours'].toString());
             } catch (e) {
               // Handle parsing error
             }

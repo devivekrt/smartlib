@@ -296,86 +296,6 @@ class _StudentCardPageState extends State<StudentCardPage> with SingleTickerProv
                   Gap(20),
 
 
-                  // Registered Libraries
-                  Container(
-                    width: double.infinity,
-                    padding: EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: isDarkMode ? Colors.grey[800] : Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: cardShadowColor,
-                          blurRadius: 10,
-                          offset: Offset(0, 5),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Registered Libraries',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: textColor,
-                              ),
-                            ),
-                            Container(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Color(0xff1940CC).withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                '${_registeredLibraries.length}',
-                                style: TextStyle(
-                                  color: Color(0xff1940CC),
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        Gap(10),
-
-                        // Library list
-                        ..._registeredLibraries.map((library) => _buildLibraryItem(library, textColor)).toList(),
-
-                        if (_registeredLibraries.isEmpty)
-                          Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(20.0),
-                              child: Column(
-                                children: [
-                                  Icon(
-                                    Icons.library_books_outlined,
-                                    color: Colors.grey,
-                                    size: 40,
-                                  ),
-                                  SizedBox(height: 16),
-                                  Text(
-                                    'No registered libraries yet',
-                                    style: TextStyle(
-                                      color: Colors.grey,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-
-                  Gap(20),
 
                   // Current Status
                   if (_currentStatus.isNotEmpty && _currentStatus['isCheckedIn'] == true)
@@ -438,7 +358,7 @@ class _StudentCardPageState extends State<StudentCardPage> with SingleTickerProv
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Text(
-                                  'ACTIVE',
+                                  _currentStatus['subscriptionStatus']?.toUpperCase() ?? 'ACTIVE',
                                   style: TextStyle(
                                     color: Colors.green,
                                     fontWeight: FontWeight.bold,
@@ -484,12 +404,36 @@ class _StudentCardPageState extends State<StudentCardPage> with SingleTickerProv
       ),
     );
   }
+// Calculate remaining days for subscription
+  int _getRemainingDays(String? dueDate) {
+    if (dueDate == null || dueDate.isEmpty) return 0;
+    try {
+      final dueDateTime = DateTime.parse(dueDate);
+      final now = DateTime.now();
+      final difference = dueDateTime.difference(now);
+      return difference.inDays;
 
-  // Rest of your methods (remaining with same implementation)...
+    } catch (e) {
+      return 0; // Return 0 if there's an error
+    }
+  }
+  //show 24hours date in 12hours format
+  String _formatTime(String timeStr) {
+    try {
+      final time = DateTime.parse(timeStr);
+      return DateFormat.jm().format(time); // Format to 12-hour time with AM/PM
+    } catch (e) {
+      return timeStr; // Return original string if parsing fails
+    }
+  }
   // Build front side of student card
   Widget _buildFrontCard(Color textColor, Color shadowColor) {
     final String studentName = _userData['fullName'] ?? _userData['name'] ?? 'Student Name';
     final String studentId = SmartLib.userId;
+    final String dueDate = _currentStatus['dueDate'] ?? 'N/A';
+    final remainingDays = _getRemainingDays(dueDate);
+
+    final String subscriptionStatus = _currentStatus['subscriptionStatus']?.toUpperCase() ?? 'INACTIVE';
     final String department = _userData['department'] ?? 'Department';
     final String profileUrl = _userData['profileImageUrl'] ?? _userData['profilePic'] ?? '';
 
@@ -588,23 +532,20 @@ class _StudentCardPageState extends State<StudentCardPage> with SingleTickerProv
                         ),
                       ],
                     ),
-                    Container(
-                      padding: EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                      ),
+                    ClipOval(
                       child: Image.asset(
-                        'assets/images/logo.png', // Replace with actual logo
-                        width: 30,
-                        height: 30,
+                        'assets/libtrack_logo.webp',
+                        fit: BoxFit.cover,
+                        width: 60,
+                        height: 60,
                         errorBuilder: (context, error, stackTrace) => Icon(
-                          Icons.school,
+                          Icons.error,
+                          color: Colors.red,
                           size: 30,
-                          color: Color(0xFF1E3A8A),
                         ),
                       ),
                     ),
+
                   ],
                 ),
 
@@ -677,16 +618,16 @@ class _StudentCardPageState extends State<StudentCardPage> with SingleTickerProv
                               ),
                               SizedBox(height: 8),
                               _buildInfoText('ID', studentId),
-                              _buildInfoText('Department', department),
+                              _buildInfoText('', department),
                               SizedBox(height: 10),
                               Container(
                                 padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                 decoration: BoxDecoration(
-                                  color: Colors.green,
+                                  color: subscriptionStatus.isEmpty? Colors.red: Colors.green,
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Text(
-                                  'ACTIVE',
+                                  subscriptionStatus,
                                   style: TextStyle(
                                     color: Colors.white,
                                     fontWeight: FontWeight.bold,
@@ -702,16 +643,30 @@ class _StudentCardPageState extends State<StudentCardPage> with SingleTickerProv
                   ),
                 ),
 
+
                 // Footer
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      'Expires: 12/31/2025',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.9),
-                        fontSize: 12,
-                      ),
+                    Row(
+                      children: [
+                        Icon(
+                            Icons.timelapse,
+                            size: 14,
+                            color: remainingDays <= 0 ? Colors.red : (remainingDays <= 5 ? Colors.orange : Colors.green)
+                        ),
+                        SizedBox(width: 4),
+                        Text(
+                          remainingDays > 0
+                              ? '$remainingDays days remaining'
+                              : 'Expired',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: remainingDays <= 0 ? Colors.red : (remainingDays <= 5 ? Colors.orange : Colors.green),
+                          ),
+                        ),
+                      ],
                     ),
                     Row(
                       children: [
@@ -742,9 +697,11 @@ class _StudentCardPageState extends State<StudentCardPage> with SingleTickerProv
 
   // Build back side of student card - FIXED to prevent overflow
   Widget _buildBackCard(Color textColor, Color shadowColor) {
-    final String studentName = _userData['fullName'] ?? _userData['name'] ?? 'Student Name';
     final String studentId = SmartLib.userId;
     final String qrData = '$studentId\_SMARTCARD';
+    final String dueDate = _currentStatus['dueDate'] != null
+        ? _formatDate(_currentStatus['dueDate'].toString())
+        : 'N/A';
 
     return Container(
       decoration: BoxDecoration(
@@ -817,16 +774,17 @@ class _StudentCardPageState extends State<StudentCardPage> with SingleTickerProv
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    Container(
-                      padding: EdgeInsets.all(8), // Smaller padding
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.school,
-                        size: 18, // Smaller icon
-                        color: Color(0xFF1E3A8A),
+                    ClipOval(
+                      child: Image.asset(
+                        'assets/libtrack_logo.webp',
+                        fit: BoxFit.cover,
+                        width: 30,
+                        height: 30,
+                        errorBuilder: (context, error, stackTrace) => Icon(
+                          Icons.error,
+                          color: Colors.red,
+                          size: 30,
+                        ),
                       ),
                     ),
                   ],
@@ -878,7 +836,7 @@ class _StudentCardPageState extends State<StudentCardPage> with SingleTickerProv
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'Issued: 01/01/2023',
+                      'Expires: ${dueDate}',
                       style: TextStyle(
                         color: Colors.white.withOpacity(0.9),
                         fontSize: 10, // Smaller font
@@ -911,79 +869,6 @@ class _StudentCardPageState extends State<StudentCardPage> with SingleTickerProv
     );
   }
 
-  // Build library item in the list
-  Widget _buildLibraryItem(Map<String, dynamic> library, Color textColor) {
-    final String libraryName = library['libraryName'] ?? library['name'] ?? 'Unknown Library';
-    final String libraryId = library['libraryId'] ?? '';
-    final bool isCurrentLibrary = _currentStatus.isNotEmpty &&
-        _currentStatus['currentLibraryId'] == libraryId;
-
-    return Container(
-      margin: EdgeInsets.only(bottom: 12),
-      padding: EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: isCurrentLibrary
-            ? Color(0xff1940CC).withOpacity(0.1)
-            : Colors.transparent,
-        border: Border.all(
-          color: isCurrentLibrary
-              ? Color(0xff1940CC)
-              : Colors.grey.withOpacity(0.3),
-          width: isCurrentLibrary ? 1.5 : 1,
-        ),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: isCurrentLibrary
-                  ? Color(0xff1940CC).withOpacity(0.1)
-                  : Colors.grey.withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.menu_book,
-              color: isCurrentLibrary ? Color(0xff1940CC) : Colors.grey,
-            ),
-          ),
-          SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  libraryName,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: textColor,
-                  ),
-                ),
-
-              ],
-            ),
-          ),
-          if (isCurrentLibrary)
-            Container(
-              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.green.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                'CURRENT',
-                style: TextStyle(
-                  color: Colors.green,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 10,
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
 
   // Build student info text for front of card
   Widget _buildInfoText(String label, String value) {

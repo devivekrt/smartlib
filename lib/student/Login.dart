@@ -121,11 +121,13 @@ class _LoginState extends State<Login> {
           NotificationService().saveUserToken(studentId);
           // Save session data
           await AuthService.saveUserSession(studentId, 'student');
+          SmartLib.userId = studentId;
         } else if (userRole == 'librarian') {
           SmartLib.userType = 'librarian';
           NotificationService().saveUserToken(librarianId);
           // Save session data
           await AuthService.saveUserSession(librarianId, 'librarian');
+          SmartLib.userId = librarianId;
         }
 
         // Navigate based on role
@@ -437,9 +439,7 @@ class _LoginState extends State<Login> {
   }
 
   void _showForgotPasswordDialog() {
-    // Forgot password dialog implementation remains the same
-    // ...
-    // (Your existing _showForgotPasswordDialog code here)
+
     final TextEditingController emailController = TextEditingController();
     final GlobalKey<FormState> formKey = GlobalKey<FormState>();
     bool isLoading = false;

@@ -105,7 +105,7 @@ class _LibrarianHomePageState extends State<LibrarianHomePage> {
 
     try {
       // Check if we have a valid user ID
-      if (SmartLib.userId == null || SmartLib.userId.isEmpty) {
+      if (SmartLib.userId.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -227,7 +227,6 @@ class _LibrarianHomePageState extends State<LibrarianHomePage> {
                 modelList.add(model);
               }
             } catch (e) {
-              print('Error fetching library $libraryId: $e');
             }
           }
         }
@@ -242,14 +241,11 @@ class _LibrarianHomePageState extends State<LibrarianHomePage> {
           _currentLibraryModel = modelList[0];
 
           // Check for shifts in the current library
-          if (_currentLibraryModel != null &&
-              _currentLibraryModel!.shifts != null) {
-            if (_currentLibraryModel!.shifts is Map<String, dynamic>) {
-              _shifts =
-                  (_currentLibraryModel!.shifts as Map<String, dynamic>).keys
-                      .toList();
-            }
-          }
+          if (_currentLibraryModel != null) {
+            _shifts =
+                (_currentLibraryModel!.shifts).keys
+                    .toList();
+                    }
 
           // Default select first shift
           if (_shifts.isNotEmpty && _selectedShift == null) {
@@ -286,7 +282,7 @@ class _LibrarianHomePageState extends State<LibrarianHomePage> {
     _occupancySubscription?.cancel();
 
     String libraryId = _currentLibrary['libraryId'];
-    if (libraryId == null || libraryId.isEmpty) return;
+    if (libraryId.isEmpty) return;
 
     final today = _formatDateToString(_selectedDate);
 
@@ -370,7 +366,7 @@ class _LibrarianHomePageState extends State<LibrarianHomePage> {
     _pendingPaymentsSubscription?.cancel();
 
     String libraryId = _currentLibrary['libraryId'];
-    if (libraryId == null || libraryId.isEmpty) return;
+    if (libraryId.isEmpty) return;
 
     try {
       // Listen for bookings with pending payments that need confirmation
@@ -779,14 +775,11 @@ class _LibrarianHomePageState extends State<LibrarianHomePage> {
         _currentLibrary = _libraries[index]; // Legacy support
 
         // Reset shift selection and update shifts list
-        if (_currentLibraryModel != null &&
-            _currentLibraryModel!.shifts != null) {
-          if (_currentLibraryModel!.shifts is Map<String, dynamic>) {
-            _shifts =
-                (_currentLibraryModel!.shifts as Map<String, dynamic>).keys
-                    .toList();
-          }
-        }
+        if (_currentLibraryModel != null) {
+          _shifts =
+              (_currentLibraryModel!.shifts as Map<String, dynamic>).keys
+                  .toList();
+                }
 
         // Default select first shift
         if (_shifts.isNotEmpty) {
@@ -814,11 +807,10 @@ class _LibrarianHomePageState extends State<LibrarianHomePage> {
 
   // Get shift name from shift ID
   String getShiftName(String shiftId) {
-    if (_currentLibraryModel != null && _currentLibraryModel!.shifts != null) {
+    if (_currentLibraryModel != null) {
       // Try to get shift name from library model
       final shifts = _currentLibraryModel!.shifts;
-      if (shifts is Map &&
-          shifts.containsKey(shiftId) &&
+      if (shifts.containsKey(shiftId) &&
           shifts[shiftId] is Map) {
         final shiftData = shifts[shiftId] as Map;
         if (shiftData.containsKey('name')) {
@@ -2091,7 +2083,7 @@ class _LibrarianHomePageState extends State<LibrarianHomePage> {
                                   ],
                                 ),
                               );
-                            }).toList(),
+                            }),
                           ],
                         );
                       },
@@ -2335,16 +2327,16 @@ class _LibrarianHomePageState extends State<LibrarianHomePage> {
       }
     }
     // Helper to check if two dates are the same day
-    bool _isSameDay(DateTime date1, DateTime date2) {
+    bool isSameDay(DateTime date1, DateTime date2) {
       return date1.year == date2.year &&
           date1.month == date2.month &&
           date1.day == date2.day;
     }
 
     // Create shift data structure
-    Map<String, Map<String, dynamic>> _shiftsData = {};
+    Map<String, Map<String, dynamic>> shiftsData = {};
     if (_currentLibraryModel?.shifts != null) {
-      _shiftsData = Map<String, Map<String, dynamic>>.from(
+      shiftsData = Map<String, Map<String, dynamic>>.from(
         _currentLibraryModel!.shifts,
       );
     }
@@ -2388,8 +2380,8 @@ class _LibrarianHomePageState extends State<LibrarianHomePage> {
                     // Generate dates from 3 days ago to 3 days ahead
                     final date = DateTime.now().add(Duration(days: index - 3));
 
-                    final isToday = _isSameDay(date, DateTime.now());
-                    final isSelected = _isSameDay(date, _selectedDate);
+                    final isToday = isSameDay(date, DateTime.now());
+                    final isSelected = isSameDay(date, _selectedDate);
 
                     return GestureDetector(
                       onTap: () {
@@ -2563,8 +2555,8 @@ class _LibrarianHomePageState extends State<LibrarianHomePage> {
 
                           // Get shift details from library model if available
                           Map<String, dynamic> shiftDetails = {};
-                          if (_shiftsData.containsKey(shiftId)) {
-                            shiftDetails = _shiftsData[shiftId]!;
+                          if (shiftsData.containsKey(shiftId)) {
+                            shiftDetails = shiftsData[shiftId]!;
                           }
 
                           final shiftName =
@@ -2792,7 +2784,7 @@ class _LibrarianHomePageState extends State<LibrarianHomePage> {
     // Process seats into rows for better organization
     Map<String, List<MapEntry<String, Map<String, dynamic>>>> seatsByRow = {};
 
-    _seats.entries.forEach((entry) {
+    for (var entry in _seats.entries) {
       final seatId = entry.key;
       if (seatId.isNotEmpty) {
         try {
@@ -2802,10 +2794,9 @@ class _LibrarianHomePageState extends State<LibrarianHomePage> {
           }
           seatsByRow[row]!.add(entry);
         } catch (e) {
-          print('Error processing seat ID: $seatId - $e');
         }
       }
-    });
+    }
 
     // Sort rows alphabetically
     final sortedRows = seatsByRow.keys.toList()..sort();
@@ -2877,14 +2868,14 @@ class _LibrarianHomePageState extends State<LibrarianHomePage> {
                     seatStatus,
                     seatStudentIds,
                     isSubRow: i > 0,
-                    rowIndicator: i > 0 ? "${row}${i + 1}" : null,
+                    rowIndicator: i > 0 ? "$row${i + 1}" : null,
                   ),
                 );
               }
             }
 
             return Column(children: rowWidgets);
-          }).toList(),
+          }),
         ],
       ),
     );
@@ -2936,34 +2927,32 @@ class _LibrarianHomePageState extends State<LibrarianHomePage> {
                       int bookedShifts = 0;
 
                       // Check all shifts status
-                      if (shiftsData is Map) {
-                        shiftsData.entries.forEach((shift) {
-                          if (shift.value is Map &&
-                              shift.value['status'] != null) {
-                            if (shift.value['status'] == 'available') {
-                              availableShifts++;
-                            } else if (shift.value['status'] == 'booked' ||
-                                shift.value['status'] == 'confirmed') {
-                              bookedShifts++;
-                            }
-                          }
-                        });
-
-                        // Check selected shift status specifically
-                        if (_selectedShift != null &&
-                            shiftsData.containsKey(_selectedShift)) {
-                          final shiftData = shiftsData[_selectedShift];
-                          if (shiftData is Map &&
-                              shiftData.containsKey('status')) {
-                            status = shiftData['status'].toString();
+                      for (var shift in shiftsData.entries) {
+                        if (shift.value is Map &&
+                            shift.value['status'] != null) {
+                          if (shift.value['status'] == 'available') {
+                            availableShifts++;
+                          } else if (shift.value['status'] == 'booked' ||
+                              shift.value['status'] == 'confirmed') {
+                            bookedShifts++;
                           }
                         }
-
-                        // Check if partially booked (some shifts available, some booked)
-                        isPartiallyBooked =
-                            availableShifts > 0 && bookedShifts > 0;
                       }
-                    }
+
+                      // Check selected shift status specifically
+                      if (_selectedShift != null &&
+                          shiftsData.containsKey(_selectedShift)) {
+                        final shiftData = shiftsData[_selectedShift];
+                        if (shiftData is Map &&
+                            shiftData.containsKey('status')) {
+                          status = shiftData['status'].toString();
+                        }
+                      }
+
+                      // Check if partially booked (some shifts available, some booked)
+                      isPartiallyBooked =
+                          availableShifts > 0 && bookedShifts > 0;
+                                        }
 
                     // Determine color based on status
                     Color seatColor;
@@ -3255,10 +3244,12 @@ class _LibrarianHomePageState extends State<LibrarianHomePage> {
                           if (library.address != null) {
                             final addressMap = library.address!;
                             final components = <String>[];
-                            if (addressMap['street'] != null)
+                            if (addressMap['street'] != null) {
                               components.add(addressMap['street']);
-                            if (addressMap['city'] != null)
+                            }
+                            if (addressMap['city'] != null) {
                               components.add(addressMap['city']);
+                            }
                             address = components.join(', ');
                           } else if (library.location != null) {
                             address = library.location!;

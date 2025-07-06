@@ -270,9 +270,13 @@ class AuthFunctions {
       // Save the complete user data to Firebase
       await userRef.set(userData);
       // Save session data
-      await AuthService.saveUserSession(librarianId, "student");
       SmartLib.userId = librarianId;
-      SmartLib.userType = "librarian";
+      SmartLib.librarianId = librarianId;
+
+      SmartLib.userType = 'librarian';
+      NotificationService().saveUserToken(librarianId);
+      // Save session data
+      await AuthService.saveUserSession(librarianId, 'librarian');
 
       // Show success message
       ScaffoldMessenger.of(context).showSnackBar(
@@ -360,6 +364,8 @@ class AuthFunctions {
       await AuthService.saveUserSession(studentId, "student");
       SmartLib.userId = studentId;
       SmartLib.userType = "student";
+      SmartLib.studentId = studentId;
+      NotificationService().saveUserToken(studentId);
 
       ScaffoldMessenger.of(
         context,

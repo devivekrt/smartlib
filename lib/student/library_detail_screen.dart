@@ -311,8 +311,8 @@ class _LibraryDetailScreenState extends State<LibraryDetailScreen> {
           // Create ShiftModel from the shift data
           final shift = ShiftModel(
             shiftName: shiftData['shiftName'],
-            startTime: shiftData['shiftStartTime'],
-            endTime: shiftData['shiftEndTime'],
+            startTime: _formatTime(shiftData['shiftStartTime']) ,
+            endTime: _formatTime(shiftData['shiftEndTime']),
             fee:
                 shiftData['shiftFee'] is int
                     ? shiftData['shiftFee']
@@ -326,6 +326,25 @@ class _LibraryDetailScreenState extends State<LibraryDetailScreen> {
 
     return shiftsList;
   }
+  //convert 24hours time format into 12 hours format with am and pm
+  String _formatTime(String time) {
+    try {
+      final dateTime = DateFormat('HH:mm').parse(time);
+      return _formatTimeOfDay(dateTime);
+    } catch (e) {
+      return time; // Return original if parsing fails
+    }
+  }
+
+
+  // Format time of day
+  String _formatTimeOfDay(DateTime dateTime) {
+    final hour = dateTime.hour % 12 == 0 ? 12 : dateTime.hour % 12;
+    final minute = dateTime.minute.toString().padLeft(2, '0');
+    final period = dateTime.hour < 12 ? 'AM' : 'PM';
+    return '$hour:$minute $period';
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -1016,33 +1035,6 @@ class _LibraryDetailScreenState extends State<LibraryDetailScreen> {
                                 ),
                               ),
 
-                              Gap(12),
-
-                              // Map placeholder (can be replaced with actual map)
-                              Container(
-                                height: 150,
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade800,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Center(
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.map_rounded,
-                                        color: Colors.white70,
-                                        size: 40,
-                                      ),
-                                      Gap(8),
-                                      Text(
-                                        "Map View",
-                                        style: TextStyle(color: Colors.white70),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
                             ],
                           ),
                         ),
@@ -1089,6 +1081,46 @@ class _LibraryDetailScreenState extends State<LibraryDetailScreen> {
                           ),
                           SizedBox(height: 24),
                         ],
+
+
+// Contact information section
+                        if (library.contactInfo != null) ...[
+                          _buildSectionHeader(
+                            title: 'Contact Details',
+                            icon: Icons.contact_phone_rounded,
+                          ),
+                          Gap(12),
+                          _buildInfoBox(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (library.contactInfo?['phone'] != null) ...[
+                                  _buildContactItem(
+                                    icon: Icons.phone_rounded,
+                                    title: library.contactInfo?['phone'],
+                                    onTap: () async {
+                                      final url = 'tel:${library.contactInfo?['phone']}';
+
+                                    },
+                                  ),
+                                  Divider(color: Colors.grey.shade800, height: 24),
+                                ],
+                                if (library.contactInfo?['email'] != null) ...[
+                                  _buildContactItem(
+                                    icon: Icons.email_rounded,
+                                    title: library.contactInfo?['email'],
+                                    onTap: () async {
+                                      final url = 'mailto:${library.contactInfo?['email']}';
+
+                                    },
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          SizedBox(height: 24),
+                        ],
+
 
                         // Shifts information - MODIFIED CODE HERE
                         if (library.shifts.isNotEmpty) ...[
@@ -1355,6 +1387,208 @@ class _LibraryDetailScreenState extends State<LibraryDetailScreen> {
     );
   }
 
+  // Helper method to build contact item with tap action
+  Widget _buildContactItem({
+    required IconData icon,
+    required String? title,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4.0),
+        child: Row(
+          children: [
+            Container(
+              padding: EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: Colors.blue, size: 20),
+            ),
+            SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                title ?? 'Not available',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                ),
+              ),
+            ),
+            Icon(
+              Icons.arrow_forward_ios_rounded,
+              color: Colors.grey.shade600,
+              size: 16,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+// Helper method to build open/closed status tag
+  Widget _buildOpenStatusTag(String? openTime, String? closeTime) {
+    // Default values if not provided
+    if (openTime == null || closeTime == null) {
+      return _buildStatusBadge(isOpen: false, message: "Status unknown");
+    }
+
+    // Convert library hours to DateTime objects for comparison
+    final now = DateTime.now();
+    final timeFormat = DateFormat("h:mm a");
+
+    try {
+      final currentTime = DateFormat("HH:mm").format(now);
+
+      // Parse opening and closing time
+      final parsedOpenTime = _parseTimeString(openTime);
+      final parsedCloseTime = _parseTimeString(closeTime);
+
+      // Check if current time is between open and close times
+      bool isOpen = _isCurrentlyOpen(currentTime, parsedOpenTime, parsedCloseTime);
+
+      // Calculate remaining time
+      String remainingTimeMessage = '';
+      if (isOpen) {
+        final closeHour = int.tryParse(parsedCloseTime.split(':')[0]) ?? 0;
+        final closeMinute = int.tryParse(parsedCloseTime.split(':')[1]) ?? 0;
+
+        final closeDateTime = DateTime(
+            now.year, now.month, now.day, closeHour, closeMinute
+        );
+
+        final difference = closeDateTime.difference(now);
+        if (difference.inHours > 0) {
+          remainingTimeMessage = 'Closes in ${difference.inHours}h ${difference.inMinutes % 60}m';
+        } else {
+          remainingTimeMessage = 'Closes in ${difference.inMinutes}m';
+        }
+      } else {
+        final openHour = int.tryParse(parsedOpenTime.split(':')[0]) ?? 0;
+        final openMinute = int.tryParse(parsedOpenTime.split(':')[1]) ?? 0;
+
+        DateTime openDateTime = DateTime(
+            now.year, now.month, now.day, openHour, openMinute
+        );
+
+        // If we've already passed today's opening time, check for tomorrow
+        if (now.isAfter(openDateTime)) {
+          openDateTime = openDateTime.add(Duration(days: 1));
+        }
+
+        final difference = openDateTime.difference(now);
+        if (difference.inHours > 0) {
+          remainingTimeMessage = 'Opens in ${difference.inHours}h ${difference.inMinutes % 60}m';
+        } else {
+          remainingTimeMessage = 'Opens in ${difference.inMinutes}m';
+        }
+      }
+
+      return _buildStatusBadge(isOpen: isOpen, message: remainingTimeMessage);
+    } catch (e) {
+      print('Error parsing library hours: $e');
+      return _buildStatusBadge(isOpen: false, message: "Hours format error");
+    }
+  }
+
+// Helper to parse time string in various formats
+  String _parseTimeString(String timeStr) {
+    // Try to normalize the time format
+    timeStr = timeStr.toLowerCase().trim();
+
+    // Handle AM/PM format
+    if (timeStr.contains('am') || timeStr.contains('pm')) {
+      final timeFormat = DateFormat("h:mm a");
+      try {
+        final dateTime = timeFormat.parse(timeStr);
+        return DateFormat("HH:mm").format(dateTime);
+      } catch (e) {
+        // Try alternative format
+        try {
+          final timeFormat = DateFormat("ha");
+          final dateTime = timeFormat.parse(timeStr);
+          return DateFormat("HH:mm").format(dateTime);
+        } catch (e) {
+          // Return as is if parsing fails
+          return timeStr;
+        }
+      }
+    }
+
+    // Already in 24-hour format or simple format
+    if (timeStr.contains(':')) {
+      return timeStr;
+    } else {
+      // Simple hour format, add minutes
+      return "$timeStr:00";
+    }
+  }
+
+// Helper to check if library is currently open
+  bool _isCurrentlyOpen(String currentTime, String openTime, String closeTime) {
+    // Handle special case where closing time is after midnight
+    if (closeTime.compareTo(openTime) < 0) {
+      // Library closes after midnight
+      return currentTime.compareTo(openTime) >= 0 || currentTime.compareTo(closeTime) < 0;
+    }
+
+    // Normal case: open time before close time
+    return currentTime.compareTo(openTime) >= 0 && currentTime.compareTo(closeTime) < 0;
+  }
+
+// Helper to build open/closed status badge
+  Widget _buildStatusBadge({required bool isOpen, required String message}) {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: isOpen ? Colors.green.withOpacity(0.1) : Colors.red.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isOpen ? Colors.green.withOpacity(0.3) : Colors.red.withOpacity(0.3),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(
+              color: isOpen ? Colors.green : Colors.red,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: isOpen ? Colors.green.withOpacity(0.5) : Colors.red.withOpacity(0.5),
+                  blurRadius: 4,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+          ),
+          SizedBox(width: 8),
+          Text(
+            isOpen ? "OPEN NOW" : "CLOSED",
+            style: TextStyle(
+              color: isOpen ? Colors.green : Colors.red,
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
+          SizedBox(width: 12),
+          Text(
+            "• $message",
+            style: TextStyle(
+              color: isOpen ? Colors.green.shade200 : Colors.red.shade200,
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
   // Helper method for consistent info boxes
   Widget _buildInfoBox({required Widget child}) {
     return Container(

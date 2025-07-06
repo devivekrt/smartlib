@@ -965,7 +965,7 @@ class _LibrarianSeatBookingsScreenState extends State<LibrarianSeatBookingsScree
                     ),
                   ],
                 )
-              ] else ...[
+              ] /*else ...[
                 Row(
                   children: [
                     Expanded(
@@ -984,7 +984,7 @@ class _LibrarianSeatBookingsScreenState extends State<LibrarianSeatBookingsScree
                     ),
                   ],
                 ),
-              ],
+              ],*/
             ],
           ),
         );

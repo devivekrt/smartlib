@@ -10,8 +10,11 @@ import 'package:intl/intl.dart';
 import 'package:smartlib/data/string.dart';
 import 'package:smartlib/function/student_function.dart';
 import 'package:smartlib/student/edit_profile_page.dart';
+import 'package:smartlib/student/term_policies.dart';
 import 'package:smartlib/student/welcomescreen.dart';
 
+import 'favorites_screen.dart';
+import 'help_support.dart';
 import 'my_bookings_screen.dart';
 import 'notification_center.dart';
 
@@ -546,10 +549,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ),
                               Divider(color: textColor.withOpacity(0.1), height: 0),
                               _buildProfileOptionItem(
-                                Icons.bar_chart,
-                                "Study Analytics",
-                                "Track your productivity and patterns",
+                                Icons.favorite,
+                                "Favorite Study Spots",
+                                "View your favorite study locations",
                                 textColor,
+                                  onTap: () {
+                                    // Navigate to edit profile page
+                                    Navigator.push(context, MaterialPageRoute(builder: (context)=> FavoritesScreen()));
+                                  }
                               ),
 
 
@@ -579,6 +586,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 "Help & Support",
                                 "Get assistance and FAQs",
                                 textColor,
+                                  onTap: () {
+                                    // Navigate to edit profile page
+                                    Navigator.push(context, MaterialPageRoute(builder: (context)=> HelpSupportPage()));
+                                  }
                               ),
                               Divider(color: textColor.withOpacity(0.1), height: 0),
                               _buildProfileOptionItem(
@@ -586,6 +597,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 "Terms & Policies",
                                 "Read our terms and privacy policy",
                                 textColor,
+                                  onTap: () {
+                                    // Navigate to edit profile page
+                                    Navigator.push(context, MaterialPageRoute(builder: (context)=> TermsPoliciesPage()));
+                                  }
                               ),
                               Divider(color: textColor.withOpacity(0.1), height: 0),
                               _buildProfileOptionItem(
