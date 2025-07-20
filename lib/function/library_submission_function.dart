@@ -23,7 +23,8 @@ class LibrarySubmissionService {
 
       // Set required fields and defaults
       libraryModel.id = libraryId;
-      libraryModel.status = 'active';
+      libraryModel.status = 'pending'; // Changed from 'active' to 'pending'
+      libraryModel.verificationStatus = 'pending'; // Set verification status
       libraryModel.rating = 0;
       libraryModel.reviews = 0;
       libraryModel.students = 0;

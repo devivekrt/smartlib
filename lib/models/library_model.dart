@@ -32,6 +32,11 @@ class LibraryModel {
   int reviews;
   int students;
   bool? canReview;
+  // Verification related fields
+  String verificationStatus; // 'pending', 'in_review', 'verified', 'rejected'
+  String? rejectionReason;
+  DateTime? verificationCompletedAt;
+  String? verificationAdminId;
   //Timestamp
    DateTime? createdAt;
 
@@ -63,6 +68,10 @@ class LibraryModel {
     this.rating = 0.0,
     this.reviews = 0,
     this.students = 0,
+    this.verificationStatus = 'pending',
+    this.rejectionReason,
+    this.verificationCompletedAt,
+    this.verificationAdminId,
     this.createdAt,
   }) : shifts = shifts ?? {};
 
@@ -135,6 +144,10 @@ class LibraryModel {
       'reviews': reviews,
       'students': students,
       'canReview': canReview ?? false,
+      'verificationStatus': verificationStatus,
+      'rejectionReason': rejectionReason,
+      'verificationCompletedAt': verificationCompletedAt?.toIso8601String(),
+      'verificationAdminId': verificationAdminId,
       'createdAt': createdAt ?? DateTime.now().toIso8601String() ,
     };
   }
@@ -214,6 +227,12 @@ class LibraryModel {
       reviews: map['reviews'] ?? 0,
       students: map['students'] ?? 0,
       canReview: false,
+      verificationStatus: map['verificationStatus'] ?? 'pending',
+      rejectionReason: map['rejectionReason'],
+      verificationCompletedAt: map['verificationCompletedAt'] != null 
+          ? DateTime.parse(map['verificationCompletedAt']) 
+          : null,
+      verificationAdminId: map['verificationAdminId'],
 
     );
   }
