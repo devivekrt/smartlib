@@ -2,7 +2,7 @@
 
 <br>
 
-<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=700&size=32&pause=1000&color=00C896&center=true&vCenter=true&width=600&lines=📚+SmartLib;Your+Smart+Library+Companion;Book+Seats.+Track+Study.+Grow." alt="SmartLib Typing SVG" />
+
 
 <br>
 
@@ -651,7 +651,6 @@ See the full [LICENSE](LICENSE) file for details.
 
 <br>
 
-<img src="https://avatars.githubusercontent.com/vivekrt" width="100" height="100" style="border-radius: 50%;" alt="Vivek Kumar" onerror="this.style.display='none'"/>
 
 <br>
 
