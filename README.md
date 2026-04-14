@@ -193,7 +193,7 @@ Booking confirmations, due date reminders, and admin broadcast alerts powered by
 ### 📊 Study Statistics — *Know How You Study, At a Glance*
 
 <p align="center">
-  <img src="assets/daily_study_bar_Medium.png" width="280" alt="Study Statistics Screen" />
+  <img src="assets/daily_study_bar.png" width="280" alt="Study Statistics Screen" />
 </p>
 
 <details>
@@ -217,7 +217,7 @@ Booking confirmations, due date reminders, and admin broadcast alerts powered by
 ### 🖥️ Librarian Dashboard — *One Dashboard. Total Control.*
 
 <p align="center">
-  <img src="assets/dashboard_Medium.png" width="280" alt="Librarian Dashboard Screen" />
+  <img src="assets/dashboard.png" width="280" alt="Librarian Dashboard Screen" />
 </p>
 
 <details>
@@ -241,7 +241,7 @@ Booking confirmations, due date reminders, and admin broadcast alerts powered by
 ### 🏛️ Library Marketplace — *Find Your Perfect Library*
 
 <p align="center">
-  <img src="assets/marketplace_Medium.png" width="280" alt="Library Marketplace Screen" />
+  <img src="assets/marketplace.png" width="280" alt="Library Marketplace Screen" />
 </p>
 
 <details>
@@ -266,7 +266,7 @@ Booking confirmations, due date reminders, and admin broadcast alerts powered by
 ### 🪑 Seat Booking — *Live Seat Booking & Tracking*
 
 <p align="center">
-  <img src="assets/seat_booking_Medium.png" width="280" alt="Seat Booking Screen" />
+  <img src="assets/seat_booking.png" width="280" alt="Seat Booking Screen" />
 </p>
 
 <details>
@@ -291,7 +291,7 @@ Booking confirmations, due date reminders, and admin broadcast alerts powered by
 ### 🗺️ Seats Board — *Real-Time Seat View with Student Info*
 
 <p align="center">
-  <img src="assets/seat_view_Medium.png" width="280" alt="Seats Board Admin View" />
+  <img src="assets/seat_view.png" width="280" alt="Seats Board Admin View" />
 </p>
 
 <details>
@@ -315,7 +315,7 @@ Booking confirmations, due date reminders, and admin broadcast alerts powered by
 ### 🛂 QR Check-In — *Seamless Entry. Scan and Go.*
 
 <p align="center">
-  <img src="assets/scan_qr_Medium.png" width="280" alt="QR Check-In Screen" />
+  <img src="assets/scan_qr.png" width="280" alt="QR Check-In Screen" />
 </p>
 
 <details>
@@ -340,7 +340,7 @@ Booking confirmations, due date reminders, and admin broadcast alerts powered by
 ### 📋 Booking History — *All Your Bookings in One Place*
 
 <p align="center">
-  <img src="assets/booking_history_Medium.png" width="280" alt="Booking History Screen" />
+  <img src="assets/booking_history.png" width="280" alt="Booking History Screen" />
 </p>
 
 <details>
