@@ -901,7 +901,7 @@ class _QRScannerScreenState extends State<QRScannerScreen>
       }
 
       // Create notification in Firestore
-      await _firestore.collection('notifications').add({
+      await _firestore.collection('userNotifications').add({
         'userId': _studentId,
         'type': 'streak_achievement',
         'title': title,

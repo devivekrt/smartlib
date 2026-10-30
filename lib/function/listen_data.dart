@@ -162,54 +162,6 @@ class ListenData {
     }
   }
 
-  /// Get all libraries data
-  Future<List<Map<String, dynamic>>> getAllLibraries() async {
-    final cacheKey = 'all_libraries';
-
-    // Return cached data if valid and offline
-    if (_isCacheValid(cacheKey) && !_isOnline) {
-      final cachedData = _memoryCache[cacheKey];
-      if (cachedData != null) {
-        return List<Map<String, dynamic>>.from(cachedData);
-      }
-      return [];
-    }
-
-    try {
-      final snapshot = await _firestore
-          .collection('libraries')
-          .orderBy('libraryName')
-          .get();
-
-      final allLibraries = <Map<String, dynamic>>[];
-
-      for (var doc in snapshot.docs) {
-        final libraryData = doc.data();
-        final libraryId = doc.id;
-        libraryData['id'] = libraryId;
-
-        allLibraries.add(libraryData);
-      }
-
-      // Cache the results
-      await _cacheData(cacheKey, allLibraries);
-
-      // Update SmartLib
-      SmartLib.allLibraryList = allLibraries;
-
-      return allLibraries;
-    } catch (e) {
-
-      // Return cached data on error if available
-      final cachedData = _memoryCache[cacheKey];
-      if (cachedData != null) {
-        return List<Map<String, dynamic>>.from(cachedData);
-      }
-
-      return [];
-    }
-  }
-
   /// Get seat bookings for a specific library
   Future<List<Map<String, dynamic>>> getSeatBookingsForLibrary() async {
     if (SmartLib.libraryId.isEmpty) {

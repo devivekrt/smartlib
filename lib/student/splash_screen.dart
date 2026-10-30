@@ -1,17 +1,10 @@
 import 'dart:async';
-import 'dart:core';
-import 'dart:core';
-import 'dart:math';
-import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:smartlib/data/string.dart';
-import 'package:smartlib/student/select_page.dart';
 import 'package:smartlib/student/welcomescreen.dart';
 import '../function/listen_data.dart';
-import '../function/review_service.dart';
 import '../function/student_function.dart';
 import '../librarian/bottom_navigation/librarain_navigation_page.dart';
 import 'main_tab_screen.dart';
@@ -34,8 +27,6 @@ class _SplashScreenState extends State<SplashScreen>
   late Animation<double> _logoOpacityAnimation;
   late Animation<double> _backgroundOpacityAnimation;
 
-  // Timer for auto navigation
-  Timer? _navigationTimer;
   bool _isNavigating = false;
 
   @override
@@ -47,8 +38,7 @@ class _SplashScreenState extends State<SplashScreen>
     // Start animations
     _startAnimations();
 
-    // Check authentication after splash animation
-    _navigationTimer = Timer(Duration(milliseconds: 2500), () {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && !_isNavigating) {
         _checkLoginStatus();
       }
@@ -179,15 +169,11 @@ class _SplashScreenState extends State<SplashScreen>
           // If it's specifically a timeout error, we might want to proceed anyway
           // but show a connectivity warning
           if (e is TimeoutException) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text("Network is slow. Some features may be limited."),
-                duration: Duration(seconds: 3),
-                backgroundColor: Colors.orange,
-              ),
-            );
-
-            return;
+            if (userRole == 'student') {
+              _navigateToStudentHome();
+            } else {
+              _navigateToLibrarianHome();
+            }
           }
         }
       }
@@ -253,7 +239,6 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   void dispose() {
-    _navigationTimer?.cancel();
     _logoAnimationController.dispose();
     _backgroundAnimationController.dispose();
     super.dispose();
