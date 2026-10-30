@@ -10,6 +10,8 @@ import 'package:smartlib/widgets/solid_button.dart';
 import 'dart:math' show min, max;
 
 import '../data/string.dart';
+import '../core/errors/error_message.dart';
+import '../features/libraries/data/library_repository.dart';
 import '../function/listen_data.dart';
 import '../function/review_service.dart';
 import '../function/student_location.dart';
@@ -31,10 +33,9 @@ class LibraryMarketplace extends StatefulWidget {
 class _LibraryMarketplaceState extends State<LibraryMarketplace> {
   final _firestore = FirebaseFirestore.instance;
   final _database = FirebaseDatabase.instance;
-  // Add a reference to ListenData service
   final _listenData = ListenData();
-  // Add reference to location service
   final StudentLocationService _locationService = StudentLocationService();
+  final LibraryRepository _libraryRepository = LibraryRepository();
 
   // Store calculated distances
   Map<String, double> _libraryDistances = {};
@@ -58,6 +59,9 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
   // Search control
   final TextEditingController _searchController = TextEditingController();
   List<LibraryModel> _filteredLibraries = [];
+  DocumentSnapshot<Map<String, dynamic>>? _lastLibraryDocument;
+  bool _hasMoreLibraries = true;
+  bool _isLoadingMoreLibraries = false;
 
   @override
   void initState() {
@@ -116,6 +120,8 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
     setState(() {
       _isLoading = true;
       _errorMessage = '';
+      _lastLibraryDocument = null;
+      _hasMoreLibraries = true;
     });
 
     try {
@@ -159,14 +165,10 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
         }
       }
 
-      // Get all libraries using ListenData service
-      final librariesData = await _listenData.getAllLibraries();
-
-      // Convert the raw data to LibraryModel objects
-      _allLibraries =
-          librariesData
-              .map((data) => LibraryModel.fromMap(data, data['id'] as String))
-              .toList();
+      final libraryPage = await _libraryRepository.fetchPage();
+      _lastLibraryDocument = libraryPage.lastDocument;
+      _hasMoreLibraries = libraryPage.hasMore;
+      _allLibraries = libraryPage.items;
 
       // Calculate and store distances for all libraries
       if (_locationService.isLocationAvailable) {
@@ -210,10 +212,41 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
         _filteredLibraries = List.from(_allLibraries);
       });
     } catch (e) {
-      print('Error fetching libraries: $e');
       setState(() {
         _isLoading = false;
-        _errorMessage = 'Failed to load libraries. Please try again.';
+        _errorMessage = userMessageFor(e);
+      });
+    }
+  }
+
+  Future<void> _loadMoreLibraries() async {
+    if (_isLoadingMoreLibraries || !_hasMoreLibraries) return;
+
+    setState(() {
+      _isLoadingMoreLibraries = true;
+    });
+
+    try {
+      final libraryPage = await _libraryRepository.fetchPage(
+        startAfter: _lastLibraryDocument,
+      );
+      _lastLibraryDocument = libraryPage.lastDocument;
+      _hasMoreLibraries = libraryPage.hasMore;
+
+      final existingIds = _allLibraries.map((library) => library.id).toSet();
+      final newLibraries = libraryPage.items
+          .where((library) => !existingIds.contains(library.id))
+          .toList();
+
+      setState(() {
+        _allLibraries.addAll(newLibraries);
+        _filteredLibraries = _filterBySearch(_searchController.text);
+        _isLoadingMoreLibraries = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoadingMoreLibraries = false;
+        _errorMessage = userMessageFor(e);
       });
     }
   }
@@ -892,23 +925,23 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
   }
 
   void _searchLibraries(String query) {
+    setState(() {
+      _filteredLibraries = _filterBySearch(query);
+    });
+  }
+
+  List<LibraryModel> _filterBySearch(String query) {
     if (query.isEmpty) {
-      setState(() {
-        _filteredLibraries = List.from(_allLibraries);
-      });
-      return;
+      return List.from(_allLibraries);
     }
 
     final lowercaseQuery = query.toLowerCase();
-    setState(() {
-      _filteredLibraries =
-          _allLibraries.where((library) {
-            final name = library.libraryName?.toLowerCase() ?? '';
-            final location = library.location?.toLowerCase() ?? '';
-            return name.contains(lowercaseQuery) ||
-                location.contains(lowercaseQuery);
-          }).toList();
-    });
+    return _allLibraries.where((library) {
+      final name = library.libraryName?.toLowerCase() ?? '';
+      final location = library.location?.toLowerCase() ?? '';
+      return name.contains(lowercaseQuery) ||
+          location.contains(lowercaseQuery);
+    }).toList();
   }
 
   void navigateToLibraryDetail(LibraryModel library) async {
@@ -1270,8 +1303,23 @@ class _LibraryMarketplaceState extends State<LibraryMarketplace> {
           child: ListView.builder(
             physics: BouncingScrollPhysics(),
             padding: EdgeInsets.symmetric(horizontal: 20),
-            itemCount: libraries.length,
+            itemCount: libraries.length + (_hasMoreLibraries ? 1 : 0),
             itemBuilder: (context, index) {
+              if (index == libraries.length) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Center(
+                    child: _isLoadingMoreLibraries
+                        ? const CircularProgressIndicator()
+                        : TextButton.icon(
+                            onPressed: _loadMoreLibraries,
+                            icon: const Icon(Icons.expand_more),
+                            label: const Text('Load more libraries'),
+                          ),
+                  ),
+                );
+              }
+
               final library = libraries[index];
               return _buildLibraryCard(library);
             },

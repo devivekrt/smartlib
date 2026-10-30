@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -5,26 +7,21 @@ import 'package:smartlib/theme/theme.dart';
 import 'package:smartlib/student/splash_screen.dart';
 
 import 'function/notification_service.dart';
-import 'function/student_location.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Set UI style - fast operation
+  await Firebase.initializeApp();
+
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.light,
     ),
   );
+
   runApp(const MyApp());
 
-  await Firebase.initializeApp();
-  // Initialize notification service
- Future.wait([
-  NotificationService().initialize(),
-  // Initialize location service
-   StudentLocationService().initialize(),
- ]);
+  unawaited(NotificationService().initialize());
 
 }
 
@@ -37,6 +34,7 @@ class MyApp extends StatelessWidget {
       title: "LibTrack",
       theme: darkTheme,
       debugShowCheckedModeBanner: false,
+      navigatorKey: NotificationService().navigatorKey,
       home: SplashScreen( ),
     );
   }

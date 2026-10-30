@@ -3,10 +3,8 @@
 
 // File: lib/services/notification_service.dart
 
-import 'dart:convert';
 import 'dart:io';
 
-import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:cloud_firestore/cloud_firestore.dart' as firestore;
 import 'package:firebase_database/firebase_database.dart' as rtdb;
@@ -154,7 +152,7 @@ class NotificationService {
       }
 
       // Save to Firestore
-      await _firestore.collection('notifications').add(notificationData);
+      await _firestore.collection('userNotifications').add(notificationData);
 
       // Update unread count in RTDB for badge
       await _incrementUnreadCount(userId);
@@ -372,7 +370,7 @@ class NotificationService {
       // Get all unread notifications
       final querySnapshot =
       await _firestore
-          .collection('notifications')
+          .collection('userNotifications')
           .where('userId', isEqualTo: userId)
           .where('read', isEqualTo: false)
           .get();
@@ -415,7 +413,7 @@ class NotificationService {
       if (userId == null || userId.isEmpty) return;
 
       // Delete FCM token from RTDB
-      await _database.ref('users/students/$userId/fcm/token').remove();
+      await _database.ref('appStatus/$userId/fcm/token').remove();
 
     } catch (e) {
     }
